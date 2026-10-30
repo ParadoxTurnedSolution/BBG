@@ -27,28 +27,169 @@ weights**: that is Phase 0, which has to run on a Mac ([spike/](spike/README.md)
 | Phase 0 spike harness | done | dry run with the synthetic backend |
 | macOS packaging (`.app`) | config only | `[tool.briefcase]` in pyproject; not built |
 
-## Install (macOS, Apple Silicon)
+## Install
+
+There is no double-click app yet. You install BBG from source with Python,
+once, and then start it from Terminal.
+
+> These steps haven't been run on a Mac yet (BBG was built and tested on
+> Linux). If a step fails, the error message is what's needed to fix it.
+
+### What you need
+
+- **A Mac with Apple Silicon** (M1 or later) and **macOS 14 or later.** SAM 3.1 runs on the Mac's GPU through Apple's MLX, which doesn't exist for Intel Macs.
+- **16 GB of memory or more.**
+- **About 3 GB of free disk:** roughly 1 GB for the software, 1.8 GB for the model.
+- **An internet connection** for installing. After that, BBG runs offline.
+
+### 1. Install Python and Git (once)
+
+Open **Terminal** (Applications → Utilities). Check whether Git is there:
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[sam3,gui]"
-bbg path/to/clip.mov          # the GUI
+git --version
 ```
 
-The first run asks you to accept the SAM License and downloads the SAM 3.1
-weights (`mlx-community/sam3.1-bf16`, about 1.8 GB) from Hugging Face.
+If macOS offers to install the *command line developer tools*, accept, wait
+for it to finish, and run `git --version` again.
 
-### Without the model
+BBG needs **Python 3.11 or newer**. The Python that comes with the developer
+tools (3.9) is too old. The simplest route is the official installer:
+
+1. Download **Python 3.12** for macOS from [python.org/downloads/macos](https://www.python.org/downloads/macos/) and run it.
+2. Check it worked:
+
+   ```bash
+   python3.12 --version
+   ```
+
+   ```bash
+   python3.12 -c "import platform; print(platform.machine())"
+   ```
+
+   The second command must print `arm64`. If it prints `x86_64`, that Python
+   runs under Rosetta and MLX won't install. Use the macOS 64-bit universal2
+   installer from python.org, or Homebrew on Apple Silicon.
+
+If you use [Homebrew](https://brew.sh), `brew install python@3.12` does the same.
+
+### 2. Get BBG
+
+Until it is merged into `main`, the code is on the branch
+`claude/gracious-turing-4xx1s7`. This puts it in a `BBG` folder in your home folder:
 
 ```bash
-pip install -e ".[gui]"
-bbg-cli demo /tmp/bbg-demo                 # synthetic clip: track + export, no model
-bbg --backend synthetic /tmp/bbg-demo/demo.mp4   # the GUI on it
+cd ~ && git clone --branch claude/gracious-turing-4xx1s7 https://github.com/ParadoxTurnedSolution/BBG.git
 ```
 
-The synthetic backend segments the synthetic clips by colour ("ball", "box",
-"dog"). It exists for tests and for trying the interface; it can't segment
-real footage.
+The repository is private, so Git will ask you to sign in to GitHub. When it
+asks for a password, give it a *personal access token*, not your account
+password (GitHub → Settings → Developer settings → Personal access tokens).
+Or sign in once with the GitHub CLI (`brew install gh`, then `gh auth login`)
+and Git will use that.
+
+### 3. Install BBG and its libraries
+
+This makes a private Python environment inside the `BBG` folder, so nothing
+is installed system-wide:
+
+```bash
+cd ~/BBG && python3.12 -m venv .venv
+```
+
+```bash
+source .venv/bin/activate
+```
+
+```bash
+pip install --upgrade pip && pip install -e ".[sam3,gui]"
+```
+
+This takes a few minutes. It installs MLX, mlx-vlm (SAM 3.1), PySide6 (the
+window), PyAV (FFmpeg) and OpenCV.
+
+### 4. Download the model (once)
+
+```bash
+bbg-cli download-model
+```
+
+It shows the SAM License terms and asks you to accept. Then it downloads
+`mlx-community/sam3.1-bf16` (about 1.8 GB) into `~/.cache/huggingface`.
+You can skip this step: the app asks the same question the first time it
+starts.
+
+If the download stops with an access or login error, the model page wants
+a Hugging Face account:
+1. Create a free account at [huggingface.co](https://huggingface.co).
+2. Open the model's page and accept its terms if it asks.
+3. Make a read token (Settings → Access Tokens), then run:
+
+   ```bash
+   hf auth login
+   ```
+
+4. Run `bbg-cli download-model` again.
+
+### 5. Start it
+
+```bash
+bbg
+```
+
+Or open a clip straight away:
+
+```bash
+bbg ~/Movies/clip.mov
+```
+
+**Every new Terminal window** needs the environment switched on before `bbg` works:
+
+```bash
+cd ~/BBG && source .venv/bin/activate
+```
+
+### Check the install without the model
+
+This runs the whole pipeline on a generated test clip (a ball, a box and a
+"dog" in flat colours), using a stand-in that segments by colour instead of
+SAM 3.1. It finishes in seconds:
+
+```bash
+bbg-cli demo ~/bbg-demo
+```
+
+It writes `~/bbg-demo/demo_prores4444.mov` with the box removed. To try the
+window on the same clip:
+
+```bash
+bbg --backend synthetic ~/bbg-demo/demo.mp4
+```
+
+The stand-in only understands those test clips. On real footage, use plain `bbg`.
+
+### Updating
+
+```bash
+cd ~/BBG && source .venv/bin/activate && git pull && pip install -e ".[sam3,gui]"
+```
+
+### Uninstalling
+
+Delete the `~/BBG` folder. The model is in
+`~/.cache/huggingface/hub/models--mlx-community--sam3.1-bf16`; delete that too
+to free its 1.8 GB. Each clip's project is a `.bbg` folder next to the clip.
+
+### If something goes wrong
+
+| Problem | Fix |
+|---|---|
+| `command not found: bbg` | The environment isn't switched on: `cd ~/BBG && source .venv/bin/activate` |
+| `No matching distribution found for mlx` | Python isn't arm64 (step 1 check), or is older than 3.11 |
+| `requires a different Python` | Use `python3.12` when making the environment (step 3) |
+| The window doesn't open, or Qt errors | Run `pip install --force-reinstall PySide6-Essentials` inside the environment |
+| Download fails with 401/403 | See the Hugging Face login steps in step 4 |
+| It's slow or the Mac swaps | Quit other apps; choose *Fast* quality. That and the 16 GB budget are exactly what Phase 0 measures |
 
 ## Use
 
