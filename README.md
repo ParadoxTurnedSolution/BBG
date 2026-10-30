@@ -1,4 +1,4 @@
 # BBG
 Background Be Gone
 
-Free and open-source, on-device video background removal for macOS and Linux machines with 16 GB of memory. See [SCOPE.md](SCOPE.md).
+On-device video background removal for Apple Silicon Macs with 16 GB of unified memory. See [SCOPE.md](SCOPE.md).
