@@ -2,7 +2,7 @@
 
 On-device video background removal for Apple Silicon Macs with 16 GB of unified memory. The user types or clicks the objects to keep, the app tracks them through the clip, and exports the result with the background removed or replaced.
 
-**Status:** scoping draft, third revision, 2026-10-30. Nothing has been built or measured yet. Speed figures quoted below come from papers, model cards and vendors, measured on other hardware. Every figure for our own targets is an estimate that the Phase 0 spike (§11) must confirm.
+**Status:** scope agreed 2026-10-30. The next step is the Phase 0 spike (§14). Nothing has been built or measured yet. Speed figures quoted below come from papers, model cards and vendors, measured on other hardware. Every figure for our own targets is an estimate that the Phase 0 spike (§11) must confirm.
 
 ---
 
@@ -17,15 +17,16 @@ On-device video background removal for Apple Silicon Macs with 16 GB of unified 
 | D3 | **macOS 27**, the latest release for an M3 Ultra Mac Studio. | Any Apple Silicon Mac on macOS 27 with ≥ 16 GB is in range. The M3 Ultra Studio starts at 96 GB, so it is the development machine, but it cannot show 16 GB problems (§7). |
 | D4 | **Clean object edges are enough.** | No matting models. Edges come from upsampling the mask with edge-aware filtering. |
 | D5 | **Typed prompts in v1, using SAM 3.1 or better.** | SAM 3.1 detects, segments and tracks from a short phrase. No separate detector is needed. |
+| D6 | **Stack for v1: Python + MLX + Qt (PySide6) + PyAV**, the recommendation in §6. | A native SwiftUI rewrite stays a later, optional project. |
+| D7 | **BBG's own code is open source under Apache-2.0** (`LICENSE`). | Only the SAM 3.1 weights, and code derived from SAM 3, carry Meta's terms (§5.2). |
+| D8 | **Limits: up to 4K and up to 10 minutes per clip.** Inputs are phone or camera footage, H.264/HEVC/ProRes, SDR and HDR. | They set the memory budget (§7), the soak test (§11) and the test set (§12). |
 
-### Still assumed (confirm or correct)
+### Assumed
 
 | # | Assumption |
 |---|---|
 | A1 | **Offline processing, not live.** Selecting on one frame feels instant; tracking the whole clip runs as a job. |
-| A2 | Inputs are phone or camera footage up to 4K, H.264/HEVC/ProRes, SDR and HDR, up to about 10 minutes long. |
-| A3 | BBG's own source stays open (Apache-2.0). Only the model weights carry Meta's terms. |
-| A4 | "Objects to keep" means things a phrase or a click can isolate. An object's shadows and reflections are not included (§13). |
+| A2 | "Objects to keep" means things a phrase or a click can isolate. An object's shadows and reflections are not included (§13). |
 
 ## 2. What the user does
 
@@ -148,11 +149,11 @@ The licence is royalty-free and allows use, modification and redistribution. In 
 - indemnify Meta,
 - Meta may change the terms.
 
-**In practice:** the app downloads the weights on first run and shows the licence before the download. Meta's official checkpoints are **gated** on Hugging Face. Phase 0 decides between asking for the user's own Hugging Face token and hosting our own converted copy, which the licence allows if it is shipped with the licence attached. The MLX port is derived from SAM 3's code, so it falls under the same terms. BBG's own code stays Apache-2.0 (A3).
+**In practice:** the app downloads the weights on first run and shows the licence before the download. Meta's official checkpoints are **gated** on Hugging Face. Phase 0 decides between asking for the user's own Hugging Face token and hosting our own converted copy, which the licence allows if it is shipped with the licence attached. The MLX port is derived from SAM 3's code, so it falls under the same terms. BBG's own code stays Apache-2.0 (D7). The licence and attribution travel with the downloaded weights.
 
 ## 6. Technology stack
 
-**Recommendation for v1: Python + MLX + Qt (PySide6) + FFmpeg (PyAV), packaged as a signed `.app`.** The only working Apple Silicon implementation of SAM 3.1 is Python on MLX (`mlx-vlm`), so building on it directly is the fastest and lowest-risk route. Because inference is MLX, the bundle needs no PyTorch.
+**Chosen for v1 (D6): Python + MLX + Qt (PySide6) + FFmpeg (PyAV), packaged as a signed `.app`.** The only working Apple Silicon implementation of SAM 3.1 is Python on MLX (`mlx-vlm`), so building on it directly is the fastest and lowest-risk route. Because inference is MLX, the bundle needs no PyTorch.
 
 | Layer | Choice |
 |---|---|
@@ -164,7 +165,7 @@ The licence is royalty-free and allows use, modification and redistribution. In 
 
 | Option | For | Against |
 |---|---|---|
-| **Python + MLX + PySide6** (recommended) | Reuses the existing SAM 3.1 port as is; one process, one language; quickest to a working tool. | Less native look and feel; a Python bundle of several hundred MB; every bundled dylib must be signed for notarisation. |
+| **Python + MLX + PySide6** (chosen) | Reuses the existing SAM 3.1 port as is; one process, one language; quickest to a working tool. | Less native look and feel; a Python bundle of several hundred MB; every bundled dylib must be signed for notarisation. |
 | SwiftUI + bundled Python/MLX helper process | Native UI and AVFoundation, with the model still in Python. | Two languages and IPC (frames and masks over shared memory). More moving parts than either pure option. |
 | SwiftUI + **MLX Swift** + AVFoundation | Best end state: native, small, no Python. | SAM 3.1 has to be ported to Swift and checked for numerical parity: several weeks, and it must be redone whenever the Python implementation improves. **Recommended as a later rewrite, not v1.** |
 | Swift + Core ML | Could use the Neural Engine. | Converting an 873M-parameter detector plus tracker, with a varying number of objects, is the hardest route. A community Core ML conversion exists but is unverified. |
@@ -289,11 +290,21 @@ A later native rewrite (SwiftUI + MLX Swift) is a separate project of roughly tw
 - Long descriptive prompts that need a language model (§5.1).
 - Linux, Windows, iPad; cloud processing; training models.
 
-## 14. Decisions still needed
+## 14. Next step: Phase 0 spike
 
-1. **Stack:** Python + MLX + Qt for v1 (recommended), or a native SwiftUI app from the start (about two months more)?
-2. **BBG's own licence:** keep it open source under Apache-2.0 (A3), or not?
-3. **Limits:** maximum resolution and length (assumed 4K and 10 minutes).
+No scope decisions remain open. Phase 0 answers the technical unknowns, and its exit criterion (§11) decides go/no-go on the 16 GB target.
+
+**What it needs:**
+- **The M3 Ultra Mac Studio and a 16 GB Apple Silicon Mac.** MLX runs on Metal, so the spike can't run in a Linux container.
+- **The test clips and phrase set** (§12).
+- **A Hugging Face account** with access to Meta's gated SAM 3.1 checkpoint, or the `mlx-community` conversion.
+
+**Order:**
+1. Memory first: peak footprint, and whether memory grows over a 10-minute clip.
+2. Then speed at 1080p and 4K, bf16 and 8-bit.
+3. Then quality: J&F, phrase recall, flicker.
+
+The spike writes one JSON report per run. The numbers that come back replace the estimates in §7 and §8.
 
 ## Sources
 
