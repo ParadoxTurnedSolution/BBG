@@ -1,0 +1,37 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      macos:
+        description: "Also run on macOS (Apple Silicon runner; costs more minutes)"
+        type: boolean
+        default: false
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: System libraries (ffmpeg CLI for the rotation test, Qt's GL/EGL)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      - run: pip install -e ".[gui,dev]"
+      - name: Tests (synthetic backend; the slow SAM 3.1 tests are excluded)
+        run: QT_QPA_PLATFORM=offscreen pytest
+
+  macos:
+    if: github.event_name == 'workflow_dispatch' && inputs.macos
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: brew install ffmpeg
+      - run: pip install -e ".[gui,dev,sam3]"
+      - run: QT_QPA_PLATFORM=offscreen pytest

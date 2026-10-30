@@ -1,0 +1,29 @@
+{
+  "backend": "sam3",
+  "models": ["mlx-community/sam3.1-bf16"],
+  "qualities": ["balanced", "fast"],
+  "clips": [
+    {
+      "name": "talking_head",
+      "video": "clips/talking_head.mov",
+      "frame": 0,
+      "phrases": ["person"],
+      "clicks": [{"xy": [960, 540]}],
+      "gt_dir": "gt/talking_head",
+      "phrase_gt": {"person": ["person"]}
+    },
+    {
+      "name": "two_dogs",
+      "video": "clips/two_dogs.mov",
+      "frame": 0,
+      "phrases": ["dog"],
+      "gt_dir": "gt/two_dogs",
+      "phrase_gt": {"dog": ["dog_1", "dog_2"]}
+    },
+    {
+      "name": "ten_minutes",
+      "video": "clips/ten_minutes.mov",
+      "phrases": ["person"]
+    }
+  ]
+}
