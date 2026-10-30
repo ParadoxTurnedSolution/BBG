@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bbg"
+version = "0.1.0"
+description = "Background Be Gone: on-device video background removal for Apple Silicon Macs"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "opencv-python-headless>=4.9",
+    "av>=14",
+    "Pillow>=10",
+    "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+# The SAM 3.1 backend. mlx-vlm's SAM 3.1 port is derived from Meta's SAM 3
+# code and its weights are under the SAM License, not Apache-2.0.
+sam3 = ["mlx>=0.32.4", "mlx-vlm==0.7.11"]
+gui = ["PySide6>=6.6"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+bbg-cli = "bbg.cli:main"
+
+[project.gui-scripts]
+bbg = "bbg.gui.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: builds the full SAM 3.1 model with random weights (minutes on CPU, ~4 GB RAM)",
+    "gui: needs PySide6",
+]
+addopts = "-m 'not slow'"
+
+[tool.briefcase]
+project_name = "BBG"
+bundle = "io.github.paradoxturnedsolution"
+version = "0.1.0"
+license.file = "LICENSE"
+
+[tool.briefcase.app.bbg]
+formal_name = "BBG"
+description = "Background Be Gone"
+sources = ["src/bbg"]
+requires = [
+    "numpy>=1.26",
+    "opencv-python-headless>=4.9",
+    "av>=14",
+    "Pillow>=10",
+    "psutil>=5.9",
+    "PySide6>=6.6",
+    "mlx>=0.32.4",
+    "mlx-vlm==0.7.11",
+]
+
+[tool.briefcase.app.bbg.macOS]
+universal_build = false

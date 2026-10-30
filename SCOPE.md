@@ -2,7 +2,7 @@
 
 On-device video background removal for Apple Silicon Macs with 16 GB of unified memory. The user types or clicks the objects to keep, the app tracks them through the clip, and exports the result with the background removed or replaced.
 
-**Status:** scope agreed 2026-10-30. The next step is the Phase 0 spike (§14). Nothing has been built or measured yet. Speed figures quoted below come from papers, model cards and vendors, measured on other hardware. Every figure for our own targets is an estimate that the Phase 0 spike (§11) must confirm.
+**Status:** scope agreed 2026-10-30. The v1 pipeline, GUI and spike harness are built (see README.md for what is tested and how), but nothing has been measured with the real SAM 3.1 weights yet. The next step is the Phase 0 spike (§14). Speed figures quoted below come from papers, model cards and vendors, measured on other hardware. Every figure for our own targets is an estimate that the Phase 0 spike (§11) must confirm.
 
 ---
 
@@ -118,7 +118,7 @@ decode ──► resize to ~1008² ──► shared backbone (once per frame)
 - It keeps every frame's memory features and mask logits for every object, although attention reads only the last few frames and the prompted frames. That is about 0.8 MB per frame per object.
 - `offload_*_to_cpu` saves nothing with unified memory.
 
-**Phase 0 must check whether SAM 3.1, and the MLX port in particular, has the same pattern.** Either way, the production loop must:
+**The MLX port does not keep everything:** mlx-vlm 0.7.11's `track_step` prunes non-conditioning outputs older than the memory window, and BBG's tests check that a session's stored outputs stay bounded. Frame loading is BBG's own (the port's tracker never sees the clip as a whole). Phase 0 still measures the whole process's footprint over a 10-minute clip. The production loop:
 - decode into a small ring buffer,
 - keep only the frames inside the memory window plus the prompted frames,
 - write each frame's mask to disk as soon as it is final,
