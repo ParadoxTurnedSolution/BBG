@@ -1,292 +1,352 @@
 # BBG (Background Be Gone): scope
 
-On-device video background removal for machines with 16 GB of unified memory. The user clicks the objects to keep, the app tracks them through the clip, and exports the result with the background removed or replaced.
+On-device video background removal for machines with 16 GB of memory, on macOS and Linux. The user types or clicks the objects to keep, the app tracks them through the clip, and exports the result with the background removed or replaced. The project is free and open source, and so is everything it depends on.
 
-**Status:** scoping draft, 2026-10-30. Nothing has been built or measured yet. Speed figures quoted below come from papers and vendors, measured on other hardware. Every figure for our own targets is an estimate that the Phase 0 spike (§11) must confirm.
+**Status:** scoping draft, revised 2026-10-30 after the first round of decisions. Nothing has been built or measured yet. Speed figures quoted below come from papers and vendors, measured on other hardware. Every figure for our own targets is an estimate that the Phase 0 spike (§11) must confirm.
 
 ---
 
-## 1. Assumptions (confirm or correct)
+## 1. Decisions and assumptions
 
-| # | Assumption | Why it matters |
+### Decided (2026-10-30)
+
+| # | Decision | Consequence |
 |---|---|---|
-| A1 | "16 GB unified memory" means an **Apple Silicon Mac** (M1–M5, including the 16 GB base MacBook Air) running macOS. | It decides the whole stack (§6). Windows-on-Arm and Intel Lunar Lake laptops also share memory between CPU and GPU. Supporting them is a different build. |
-| A2 | **Offline processing, not live.** Selecting on one frame feels instant. Tracking the whole clip runs as a job and may be slower than real time. | Live webcam use needs a different model tier and architecture. |
-| A3 | Inputs are phone or camera footage up to 4K, H.264/HEVC/ProRes, SDR and iPhone HDR (HLG), up to about 10 minutes long. | Memory budget, colour handling, test matrix. |
-| A4 | It will be **distributed** (free or paid), not just used privately. | It rules out non-commercial model weights (§5). |
-| A5 | "Features/objects to keep" means things a click can isolate: a person, a pet, a held object, or part of one (by subtracting). | Shadows, reflections and smoke that belong to an object are not segmented by these models (§13). |
+| D1 | **macOS and Linux only.** | The stack is cross-platform (§6). The native Swift, Core ML and Apple Vision route is dropped. |
+| D2 | **Fully unrestricted FOSS.** | Every shipped component must be OSI-approved, with no field-of-use restrictions, no non-commercial terms and no gated downloads. Read with D5, this excludes SAM 3.1 from the default build (§5.1). |
+| D3 | **macOS: the latest release that runs on an M3 Ultra Mac Studio**, i.e. macOS 27, which is Apple Silicon only. | Any Apple Silicon Mac that runs macOS 27 with ≥ 16 GB is in range. The M3 Ultra Studio starts at 96 GB, so it is the reference and development machine, but it cannot show 16 GB problems (§7). |
+| D4 | **Clean object edges are enough.** | No matting models. Edges come from upsampling the mask with edge-aware filtering. This removes a whole quality tier and its biggest memory peak. |
+| D5 | **Typed prompts in v1** ("dog", "person in red"); the user asked for SAM 3.1 or better. | A text-grounding model is required. The licence conflict with D2 is in §5.1. |
+
+**How I read D2:**
+- Permissive licences (Apache-2.0, MIT, BSD) are preferred.
+- LGPL is accepted only for libraries that are dynamically linked: FFmpeg and Qt (PySide6).
+- No GPL components, so the app itself can be Apache-2.0.
+- GPU drivers and runtimes (Apple Metal, NVIDIA's driver and CUDA, AMD ROCm) are part of the user's system, not something we ship.
+
+### Still assumed (confirm or correct)
+
+| # | Assumption |
+|---|---|
+| A1 | **Offline processing, not live.** Selecting on one frame feels instant; tracking the whole clip runs as a job. |
+| A2 | Inputs are phone or camera footage up to 4K, H.264/HEVC/ProRes/AV1, SDR and HDR, up to about 10 minutes long. |
+| A3 | **Linux tier 1 is NVIDIA CUDA**: discrete GPUs, and unified-memory boards such as Jetson Orin NX 16 GB. **AMD ROCm is best-effort**: Strix Halo support was still settling in 2026. The CPU is a slow fallback, there for correctness only. Asahi Linux on Apple Silicon has no usable GPU compute for this, so it is CPU only. |
+| A4 | "Objects to keep" means things a click or a short phrase can isolate. An object's shadows and reflections are not included (§13). |
 
 ## 2. What the user does
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ [Open…] interview.mov    Quality: Fast | Balanced | Best  [Export]│
+│ [Open…] interview.mov          Quality: Fast | Balanced  [Export]│
 ├────────────────────────────────────────────┬─────────────────────┤
-│                                            │ Objects             │
-│                                            │ ■ Person 1   [Keep ✓]│
-│          viewer: current frame             │ ■ Dog        [Keep ✓]│
-│   click = add   ⌥-click = subtract         │ ■ Chair      [Keep  ]│
-│   drag = box                               │ [Auto-detect] [+ New]│
+│                                            │ Find: [dog        ] ⏎│
 │                                            ├─────────────────────┤
+│          viewer: current frame             │ Objects             │
+│   click = add   ⌥/Alt-click = subtract     │ ■ person 1  [Keep ✓]│
+│   drag = box                               │ ■ dog 1     [Keep ✓]│
+│                                            │ ■ dog 2     [Keep ✓]│
+│                                            │ ■ chair     [Keep  ]│
+│ View: Overlay | Matte | Result             ├─────────────────────┤
 │                                            │ Background          │
-│ View: Overlay | Matte | Result             │ ◉ Transparent        │
+│                                            │ ◉ Transparent        │
 │                                            │ ○ Colour ○ Image ○ Blur│
 ├────────────────────────────────────────────┴─────────────────────┤
-│ ▕████████████▏⚠▕██████████████████▏   Person 1                   │
-│ ▕██████▏        ▕█████████▏           Dog                        │
+│ ▕████████████▏⚠▕██████████████████▏   person 1                   │
+│ ▕██████▏        ▕█████████▏           dog 1                      │
 │ [▶ Track]  ██████████░░░░░░  412 / 1800 frames · ~3 min left     │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 1. **Open** a clip by drag-and-drop. The app shows the first frame and a timeline of thumbnails.
 2. **Select** on any frame:
-   - **Auto-detect** outlines the likely subjects. The user ticks the ones to keep.
-   - **Click** adds a point (⌥-click subtracts one), or **drag a box**.
-   - *Optional, depends on model choice:* type a word ("dog") to select every match.
-3. **Track** forwards and backwards from every frame the user annotated, with a progress bar, a cancel button and a live preview.
-4. **Review.** The timeline shows where each object is present and flags frames where tracking looks unreliable (low object score, sudden jumps in area). The user jumps between flags.
+   - **Type** a phrase. Every match becomes an object in the list (dog 1, dog 2…), and the user unticks any they don't want.
+   - **Click** adds a point (⌥/Alt-click subtracts one), or **drag a box** for anything the phrase missed.
+3. **Track** forwards and backwards from every annotated frame, with a progress bar, a cancel button and a live preview. Typed phrases are re-run every N frames and at scene cuts. New matches (a second dog walking in) join the list, and matches that overlap an existing track are merged into it.
+4. **Review.** The timeline flags frames where tracking looks unreliable (low object score, sudden jumps in area).
 5. **Fix.** The user clicks on a flagged frame, and the app re-tracks only the affected span.
-6. **Refine edges** with the quality tier, grow/shrink and feather controls.
+6. **Edges:** grow/shrink and feather.
 7. **Background:** transparent, solid colour, image, blur of the original, or another video.
 8. **Export** (§9).
 
 A project file saves the prompts and the mask cache, so the user can quit and come back.
 
-**Design rule:** every selected object is tracked. **Keep** only changes what gets composited, so ticking or unticking an object never requires re-tracking.
+**Design rule:** every listed object is tracked. **Keep** only changes what gets composited, so ticking or unticking an object never requires re-tracking.
 
 ## 3. Feature tiers
 
 | Feature | MVP | v1 | Later |
 |---|:-:|:-:|:-:|
-| Open video, scrub, preview | ✓ | | |
-| Click/box select on one frame, track forwards and backwards | ✓ | | |
+| Open video, scrub, preview (macOS and Linux/CUDA) | ✓ | | |
+| Typed phrase on one frame → objects | ✓ | | |
+| Click/box select on one frame | ✓ | | |
+| Bidirectional tracking with bounded memory | ✓ | | |
 | Several objects with Keep toggles | ✓ | | |
 | Transparent / colour background | ✓ | | |
-| Export ProRes 4444, PNG sequence, flattened MP4 | ✓ | | |
+| Export ProRes 4444, PNG sequence, matte video | ✓ | | |
+| Re-detecting typed phrases during tracking (new instances, objects re-entering) | | ✓ | |
 | Corrections on any frame with partial re-tracking | | ✓ | |
-| Auto-detect proposals | | ✓ | |
 | Confidence flags on the timeline | | ✓ | |
 | Save/resume a project | | ✓ | |
-| Image / blur / video backgrounds, HEVC-with-alpha export | | ✓ | |
-| "Best" edge tier (matting for hair and motion blur) | | ✓ | |
-| 4K at full-resolution edges, HDR passthrough | | ✓ | |
-| Text prompts ("all the dogs") | | | ✓ |
-| Batch queue, iPad build, WebM-alpha export | | | ✓ |
+| Image / blur / video backgrounds | | ✓ | |
+| Flattened AV1/VP9 export, VP9-alpha WebM | | ✓ | |
+| Full-resolution 4K edges, HDR passthrough | | ✓ | |
+| AMD ROCm support | | ✓ (best-effort) | |
+| MLX backend on macOS (if MPS is too slow) | | | ✓ |
+| Optional SAM 3.1 plug-in (§5.1) | | | ✓ |
+| Batch queue | | | ✓ |
 
 ## 4. Processing pipeline
 
 ```
-decode ──► resize to model input ──► image encoder ──► mask decoder ◄── user prompts
-(VideoToolbox)   (1024², ImageNet norm)  (expensive,        (cheap, ms)     (points/box)
-                                          once per frame)        │
-                                                                 ▼
-                      memory bank ◄── memory encoder ◄── low-res mask logits (256²)
-                    (last N frames +                            │
-                     prompted frames)                           ▼
-                                               upsample to source res + edge refine
-                                               (guided filter, or matting in the
-                                                boundary band only)
-                                                                 │
-                                               temporal smoothing of alpha
-                                                                 │
-                                         mask cache on disk (per object, per frame)
-                                                                 │
-                         compositor (Metal / Core Image) ──► encoder (AVAssetWriter)
-                                                              + audio passthrough
+decode ──► resize ──┬─► text grounding (phrase → boxes) ── on annotated frames,
+(FFmpeg via         │    and every N frames for typed phrases
+ PyAV; hw decode)   │               │ boxes
+                    │               ▼
+                    └─► image encoder ──► mask decoder ◄── clicks / boxes
+                        (once per frame)   (cheap)
+                                              │
+                   memory bank ◄── memory encoder ◄── low-res mask logits (256²)
+                 (last N frames +                         │
+                  prompted frames)                        ▼
+                                          upsample to source res + guided filter
+                                                          │
+                                          temporal smoothing of alpha
+                                                          │
+                                   mask cache on disk (per object, per frame)
+                                                          │
+                          compositor (GPU tensors) ──► encoder (FFmpeg via PyAV)
+                                                       + audio passthrough
 ```
 
 **Streaming with bounded memory is the core engineering task on 16 GB.** The reference SAM 2 video predictor is not built for it:
 
 - `init_state` loads **every frame** of the clip up front as a float32 1024×1024 tensor (`sam2/utils/misc.py`: `torch.zeros(num_frames, 3, image_size, image_size, dtype=torch.float32)`). That is about 12.6 MB per frame, so a 1-minute 30 fps clip needs about 22 GB before tracking starts.
-- It keeps every frame's memory features and mask logits for every object, although attention reads only the last few frames (`num_maskmem`) and the prompted frames. That is about 0.8 MB per frame per object (64×64×64 memory features in bf16 plus 256² logits), roughly 5–6 GB for a 1-minute clip with 4 objects.
-- `offload_video_to_cpu` and `offload_state_to_cpu` move this data from GPU memory to CPU memory. With unified memory those are the same RAM, so the options save nothing.
+- It keeps every frame's memory features and mask logits for every object, although attention reads only the last few frames (`num_maskmem`) and the prompted frames. That is about 0.8 MB per frame per object, roughly 5–6 GB for a 1-minute clip with 4 objects.
+- `offload_video_to_cpu` and `offload_state_to_cpu` save nothing with unified memory. They do help on Linux machines with a discrete GPU.
 
 The production tracker therefore needs its own loop:
 - decode into a small ring buffer,
 - keep only the frames inside the memory window plus the prompted frames,
 - write each frame's mask to disk as soon as it is final,
-- cache image embeddings only for the frames the user is annotating (a small LRU), so that clicking stays instant.
+- keep image embeddings only for the frames being annotated (a small LRU).
 
-## 5. Model options
+The tracking loop in Grounded-SAM-2 (Apache-2.0) is a starting point for re-detecting typed phrases and keeping object IDs stable across re-detections.
 
-### Tracking and segmentation (core)
+## 5. Models
 
-| Candidate | Size | Licence | Notes |
+### 5.1 Typed prompts: the licence conflict
+
+**SAM 3.1 does not meet D2.** Its code and weights are under Meta's **SAM License**:
+- **Not OSI-approved.** It bars end uses prohibited by trade controls, "including those related to military or warfare purposes". That is a field-of-use restriction, contrary to point 6 of the Open Source Definition.
+- It forbids reverse engineering the SAM Materials.
+- It requires an indemnity.
+- Meta may change the terms, and continued use counts as acceptance.
+- The checkpoints are **gated**: a download has to be requested on Hugging Face.
+- **Any port of SAM 3 code inherits the same licence.**
+
+On top of that, the official repo needs a CUDA GPU (Python 3.12+, PyTorch 2.7+, CUDA 12.6+). On a Mac it runs only through community MLX ports, whose video tracking is marked experimental.
+
+**What SAM 3.1 would buy:** Meta reports that SAM 3 roughly doubles the accuracy of earlier systems on concept segmentation in images and video, with zero-shot LVIS mask AP of 48.8 against 38.5 for the previous best. A FOSS pipeline will miss more objects and false-match more often, so the user clicks more.
+
+| Option | Licence status | Quality | Recommendation |
 |---|---|---|---|
-| **SAM 2.1** Tiny / Small / Base+ / Large | 38.9M / 46M / 80.8M / 224.4M params | Apache 2.0 | Point/box prompts and video memory. Meta reports 91 / 85 / 64 / 40 fps, but on an A100, not on Apple hardware. Apple publishes fp16 Core ML conversions on Hugging Face (`apple/coreml-sam2.1-*`); they are **image-only**, with no memory modules converted. A community MLX port that tracks video exists (`eisneim/sam2.1_mlx`), but it is early-stage and was tested only on 60-frame clips. |
-| **EdgeTAM** (Meta, CVPR 2025) | SAM 2 distilled for phones | Apache 2.0 | About 16 fps on an iPhone 15 Pro Max per the paper, versus about 1 fps for SAM 2 Tiny converted naively to Core ML. 87.7 J&F on DAVIS 2017. Candidate for the **Fast** tier. |
-| **SAM 3 / SAM 3.1** (Meta, Nov 2025 / Mar 2026) | ~0.86–0.87B params | **SAM License** (custom Meta licence) | Adds text prompts ("every dog") and detect-then-track, which can find an object again after it leaves the frame. 3.1's Object Multiplex tracks objects jointly; Meta reports about 2× throughput at moderate object counts, measured on an H100. MLX ports exist (8-bit, 5-bit), but their video tracking is marked experimental. The licence is royalty-free and allows redistribution with the licence attached. It also bans trade-controlled and military end uses, carries an indemnity, and lets Meta change the terms. **Needs legal review before shipping.** |
-| **Apple Vision** (built in, nothing to bundle) | n/a | OS API | `VNGeneratePersonSegmentationRequest` segments people per frame. `VNGenerateForegroundInstanceMaskRequest` (macOS 14+) segments salient subjects in still images. `GenerateIterativeSegmentationRequest` (WWDC26 session 237) is tap-to-segment with include/exclude points: still images only, the model downloads on first use, and its minimum OS is not yet confirmed. **None of them track across frames.** Use them for Auto-detect proposals on the annotated frame and as a fast people-only mode. |
+| **A. FOSS text grounding + SAM 2.1** (detector finds boxes, SAM 2.1 tracks) | Fully FOSS | Below SAM 3.1 (gap to be measured in Phase 0) | **Default build** |
+| **B. A + an optional SAM 3.1 plug-in**, a separate package and repo under the SAM License, which the user installs and gates themselves; BBG ships no SAM 3 code or weights | BBG stays fully FOSS; a user who opts in accepts Meta's terms | SAM 3.1 for those who opt in | **Recommended**, built after v1 |
+| C. Make SAM 3.1 required | Breaks D2 | Best | Only if D2 is relaxed |
 
-### Edge refinement and matting ("Best" tier)
+### 5.2 Candidates for the FOSS default
 
-| Candidate | Licence | Notes |
-|---|---|---|
-| Guided filter on the upsampled mask | n/a, no model | Cheap and handles most edges. The **Balanced** default. |
-| **ViTMatte** (trimap from the tracked mask, boundary band only) | MIT code | Check the weights: trained on research matting datasets whose terms may not allow commercial use. |
-| **BiRefNet** (general, HR, matting and lite variants up to about 2K) | MIT code | Heavy: the authors report 3.45 GB of GPU memory at 1024² fp16 on an RTX 4090. Works per frame, with nothing keeping edges consistent over time. |
-| **BEN2** | MIT code | Alternative per-frame refiner, to evaluate. |
-| *Avoid unless licensed:* RMBG-2.0 | CC BY-NC 4.0 | Non-commercial. BRIA sells a commercial licence. |
-| *Avoid unless licensed:* MatAnyone, MatAnyone 2 | NTU S-Lab 1.0 | Non-commercial. Otherwise the best fit (video matting from a first-frame mask). |
-| *Avoid:* RobustVideoMatting | GPL-3.0 | Copyleft; incompatible with a closed app. |
+| Role | Candidate | Licence | Notes |
+|---|---|---|---|
+| Tracker | **SAM 2.1** Tiny / Small / Base+ / Large (38.9M / 46M / 80.8M / 224.4M params) | Apache-2.0 | Meta reports 91 / 85 / 64 / 40 fps, measured on an A100. Its example notebooks warn that "Support for MPS devices is preliminary": the model was trained with CUDA and may give different or worse results on MPS. Measure that. |
+| Tracker (Fast tier) | **EdgeTAM** | Apache-2.0 | SAM 2 distilled for phones: ~16 fps on an iPhone 15 Pro Max per the paper, and 87.7 J&F on DAVIS 2017. |
+| Text grounding | **Grounding DINO**, **MM-Grounding-DINO** (OpenMMLab) | Apache-2.0 | The standard pairing with SAM (Grounded-SAM-2). Use the pure-PyTorch implementation in Hugging Face `transformers`: the original repo's custom CUDA kernel doesn't exist on Mac. |
+| Text grounding | **LLMDet** | Apache-2.0 | A Grounding DINO derivative trained with captions from a language model. |
+| Text grounding | **OWLv2** | Apache-2.0 | Google's open-vocabulary detector. Can also take an example image as the prompt. |
+| Text grounding | **Florence-2** (0.23B / 0.77B) | MIT | Grounds phrases and referring expressions ("the person on the left"). |
+| Edges | Guided filter on the upsampled mask | n/a (no model) | Enough for clean edges (D4). |
+| *Excluded by D2* | SAM 3 / 3.1 (SAM License), YOLOE / YOLO-World (AGPL/GPL), RMBG-2.0 (CC BY-NC), MatAnyone (NTU S-Lab, non-commercial), RobustVideoMatting (GPL-3.0) | | |
 
-**Proposed for v1** (spike to confirm):
-- **Tracker:** SAM 2.1 Small or Base+ for Balanced, EdgeTAM for Fast.
-- **Edges:** guided filter by default; matting in the boundary band for Best, licence permitting.
-- **Auto-detect:** Apple Vision proposals.
-- **SAM 3.1:** evaluated in the spike for text prompts and re-detection. Adopt it only if the licence is acceptable and it fits the memory budget.
+**Phase 0 decides** which grounding model is the default, by testing all four on the same phrase set (§12).
 
 ## 6. Technology stack
 
-**Recommendation: a native macOS app.**
-- **UI:** Swift and SwiftUI, with an AppKit/MTKView viewer.
-- **Video:** AVFoundation and VideoToolbox for hardware decode and encode.
-- **Compositing:** Metal and Core Image.
-- **Inference:** Core ML (Neural Engine or GPU), converted with `coremltools`. MLX Swift is the alternative where Core ML conversion stalls.
+**Recommendation: Python with PyTorch for inference, Qt for the GUI, FFmpeg for video.** This is the only stack where the reference model code, the macOS GPU (MPS), CUDA and ROCm are all supported, and the research models change too fast to keep re-exporting them to ONNX or Core ML.
 
-| Option | For | Against |
+| Layer | Choice | Licence |
 |---|---|---|
-| **Native Swift + Core ML** (recommended) | Tight memory control, hardware codecs, the Neural Engine (frees the GPU and runs cooler on fanless Macs), native ProRes/HEVC-alpha export, a small notarised `.app`. | The SAM 2 memory encoder and memory attention must be converted and validated ourselves (Apple's conversion covers only image segmentation). It is Mac-only. |
-| Native Swift + MLX Swift | Ports are simpler than Core ML conversion, community SAM 2.1/3 ports exist, quantisation is easy. | GPU only, no Neural Engine. The ports are young. |
-| Python (PyTorch MPS) + Qt/PySide | Fastest to prototype, since the reference code runs as is. | A bundle of 1–2 GB, less predictable MPS memory, some ops fall back to the CPU, awkward to sign and ship. **Use it for the spike only.** |
-| C++/Rust core + ONNX Runtime (CoreML / DirectML / QNN providers) + Qt or Tauri | Cross-platform (Windows on Arm, Lunar Lake). | Roughly 1.5× the effort, weaker Apple performance, and three model paths to validate. Only if A1 is wrong. |
+| Language | Python 3.12+ | PSF |
+| Inference | PyTorch (MPS on macOS, CUDA/ROCm on Linux, CPU fallback); `transformers` for the grounding models | BSD-3 / Apache-2.0 |
+| Later: macOS speed-up | MLX (Metal on macOS, CUDA on Linux), if MPS proves too slow | MIT |
+| GUI | Qt 6 via PySide6 | LGPL-3.0 (dynamically linked) |
+| Video in/out | FFmpeg via PyAV: hardware decode with VideoToolbox (macOS), NVDEC/VAAPI (Linux) | LGPL-2.1+ / BSD-3 |
+| Image ops | NumPy, OpenCV (guided filter, morphology) | BSD-3 / Apache-2.0 |
+| Packaging | macOS: `.app` via Briefcase or PyInstaller (signing and notarising need an Apple Developer ID). Linux: `pipx`/PyPI, and Flatpak for CPU and ROCm builds | BSD-3 / GPL-2.0 with bootloader exception |
+
+**FFmpeg must be an LGPL build:** no `--enable-gpl` or `--enable-nonfree`, and therefore no x264 or x265. PyAV's prebuilt wheels bundle FFmpeg; **check their configure flags** and build our own if they include GPL parts.
+
+**Rejected:**
+- **Rust/C++ with ONNX Runtime:** faster and smaller, but exporting SAM 2's memory modules and the grounding models to ONNX, and keeping three execution providers working, is weeks of work per model update.
+- **Swift with Core ML:** doesn't run on Linux.
 
 ## 7. Memory budget (16 GB machine)
 
-macOS, a browser and an editor can easily take 5–6 GB. **Target app peak ≤ 6 GB, hard ceiling 8 GB, no swap growth over a 10-minute clip.** The GPU is capped below physical RAM; read `MTLDevice.recommendedMaxWorkingSetSize` on the real target machine rather than assuming a value.
+The operating system and other open apps can take 5–6 GB. **Target app peak ≤ 6 GB, hard ceiling 8 GB, no swap growth over a 10-minute clip.**
+
+The development machine (M3 Ultra, ≥ 96 GB) won't show memory pressure, so the budget is enforced in the app:
+- MPS: `PYTORCH_MPS_HIGH_WATERMARK_RATIO`
+- CUDA: `torch.cuda.set_per_process_memory_fraction`
+- MLX: `mx.set_memory_limit`
+
+Peak footprint is logged on every run. **The final QA runs on a real 16 GB Mac** (any M-series base model) and on an 8–16 GB NVIDIA Linux machine.
 
 | Item | Estimate |
 |---|---|
 | SAM 2.1 Base+ weights, fp16 | ~0.16 GB (Large ~0.45 GB) |
-| SAM 3.1 weights | ~1.75 GB at bf16, ~0.9 GB at 8-bit |
-| Encoder activations at 1024² | 0.5–1.5 GB, **to measure** |
+| Grounding model weights | ~0.3–1.5 GB depending on the model; loaded at prompt time and for re-detection |
+| Encoder and detector activations at ~1024² | 0.5–2 GB, **to measure** |
 | Decoded frame ring buffer (16 frames) | 4K BGRA 8-bit is 33 MB a frame, about 0.5 GB in total |
 | Tracker state (memory window + prompted frames) | Tens of MB per object, bounded |
 | Mask cache | On disk, not in RAM |
-| Preview and compositing textures | ~0.3 GB |
-| Matting model + activations (Best tier) | **Several GB.** Run it as a separate pass after tracking, on the boundary band only, with the tracker unloaded. |
+| Preview and compositing | ~0.3 GB |
+| *Optional SAM 3.1 plug-in* | ~1.75 GB of bf16 weights (~0.9 GB at 8-bit) plus activations |
 
-Balanced should land around 2–4 GB. Best is where 16 GB gets tight, which is why tracking and refinement run as separate passes and never at the same time.
+The FOSS default should land around 2–4 GB. Dropping matting (D4) removed the largest peak from the first draft.
 
 ## 8. Performance targets (to validate, not yet known)
 
-Targets, on the slowest supported machine (M1 or M2 MacBook Air, 16 GB):
+Targets, on a 16 GB Apple Silicon Mac under macOS 27:
 
 | Measure | Target |
 |---|---|
-| Click to mask on an annotated frame | < 300 ms after that frame's encoder has run once (target < 1 s) |
-| Tracking, Balanced, 1080p | ≥ 5 fps, so a 1-minute 30 fps clip takes ≤ 6 min |
-| Tracking, Fast, 1080p | ≥ 15 fps |
-| Best tier, 4K | ≥ 1 fps; acceptable as an overnight job |
+| Typed phrase to objects on the current frame | < 2 s |
+| Click to mask | < 300 ms once the frame has been encoded |
+| Tracking, Balanced (SAM 2.1 S/B+), 1080p | ≥ 5 fps, so a 1-minute 30 fps clip takes ≤ 6 min |
+| Tracking, Fast (EdgeTAM), 1080p | ≥ 15 fps |
+| 4K | Tracked at model resolution, edges refined at full resolution; ≥ 2 fps |
 
-Published speed numbers come from an A100/H100 or an iPhone and do not carry over. EdgeTAM's paper shows that SAM 2 Tiny converted naively to Core ML ran at about 1 fps on a phone, so how a model is converted matters as much as which model is picked. **Fanless MacBook Airs throttle** on long jobs, so the app needs pause/resume, checkpointing and time estimates that adapt.
+The Linux/CUDA targets will be set from Phase 0 numbers.
+
+Published speeds come from an A100/H100 or an iPhone and do not carry over. EdgeTAM's paper shows that SAM 2 Tiny converted naively to Core ML ran at about 1 fps on a phone, so the runtime matters as much as the model. Fanless MacBook Airs throttle on long jobs, so the app needs pause/resume and checkpointing.
 
 ## 9. Export
 
-| Format | Use | Notes |
+Every format below can be written with FOSS encoders.
+
+| Format | Encoder (licence) | Use |
 |---|---|---|
-| ProRes 4444 with alpha (`.mov`) | Final Cut, Premiere, Resolve | Large files. Hardware encode only on chips with a ProRes engine; software encoding elsewhere. |
-| HEVC with alpha (`.mov`) | Apple apps, Safari, Keynote | Small files; poorly supported outside Apple. |
-| PNG / TIFF sequence with alpha | Any tool | Universal; many files. |
-| Matte-only video (greyscale) | Track matte in any editor | Cheap and very compatible. |
-| Flattened MP4 (H.264/HEVC) | Sharing directly | With a colour, image, blur or video background. |
-| WebM VP9 with alpha | Web | Needs a bundled libvpx (BSD). Later. |
+| ProRes 4444 with alpha (`.mov`) | FFmpeg `prores_ks` (LGPL), or `prores_videotoolbox` on macOS | DaVinci Resolve, Kdenlive, Blender, Premiere, Final Cut |
+| PNG / TIFF sequence with alpha | FFmpeg (LGPL) | Any tool |
+| Matte-only video | FFV1 (LGPL, lossless) or ProRes 422 | Track matte in any editor |
+| WebM VP9 with alpha | libvpx (BSD-3) | Web |
+| Flattened AV1 / VP9 | SVT-AV1 or libaom, libvpx (BSD) | Sharing; royalty-free codecs |
+| Flattened H.264/HEVC | Hardware only: VideoToolbox (macOS), NVENC/VAAPI (Linux) | Compatibility. **No x264/x265** (GPL). |
+| HEVC with alpha | `hevc_videotoolbox`, macOS only | Apple apps; optional |
 
 For all formats:
 - pass the audio through,
-- keep the frame rate (including variable frame rate), rotation metadata and colour space.
+- keep the frame rate (including variable frame rate), rotation metadata and colour metadata.
 
-**HDR needs a decision.** The proposed default: models see an SDR conversion, and the output keeps the original pixels and transfer function.
+For HDR, the models see an SDR conversion, and the output keeps the original pixels and transfer function.
 
 ## 10. Risks
 
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Tracker memory grows with clip length (§4) | High | Own tracking loop with a bounded window, eviction and a disk cache. Soak test on 10-minute clips. |
-| Converting SAM 2's memory attention (RoPE) and memory encoder to Core ML; Neural Engine op coverage | High | Start from Apple's image-only conversion and export fixed shapes. Fall back to the GPU, or to MLX, per module. |
-| Hair, fur, motion blur, semi-transparency | Med–High | Best tier with matting. Quality tiers set expectations in the UI. |
-| Edge flicker over time | Med | Smooth alpha over time; refine consistently from frame to frame; flicker metric in QA. |
-| Drift, occlusion, objects leaving and re-entering | Med | Confidence flags and cheap corrections. SAM 3.1's re-detection as an option. |
-| Model licences | High if shipped | Only Apache/MIT by default. Legal review for the SAM License; no non-commercial weights. |
+| FOSS text grounding falls well short of SAM 3.1 | Med–High | Measure the gap in Phase 0. Re-detection, quick click fixes and the opt-in SAM 3.1 plug-in. |
+| MPS accuracy or speed differs from CUDA, or ops fall back to the CPU | Med–High | Run every benchmark on both. Use the MLX backend as the escape route on macOS. |
+| ROCm instability on AMD APUs | Med | Best-effort tier; CI on CPU and CUDA only at first. |
+| A GPL or non-free component slips in (FFmpeg flags, transitive dependencies) | High for D2 | A licence audit in CI (`pip-licenses`, FFmpeg `-buildconf` check) that fails the build. |
+| Edge flicker over time | Med | Smooth alpha over time; measure flicker in QA. |
+| Drift, occlusion, objects re-entering | Med | Periodic re-detection for typed phrases, confidence flags, cheap corrections. |
+| Packaging Python and PyTorch (bundle size, notarisation) | Med | A per-platform installer that downloads models with checksums; size measured in Phase 0. |
 | Thermal throttling | Med | Pause/resume, checkpoints, adaptive time estimates. |
-| HDR, VFR, rotation, odd codecs | Med | A test matrix of real phone footage. |
-| Expecting shadows and reflections to be kept | Expectation | State it in the UI and docs; out of scope (§13). |
+| Expecting shadows and reflections to be kept | Expectation | State it in the UI and docs (§13). |
 
 ## 11. Phases and effort
 
 | Phase | Weeks | Delivers | Exit criterion |
 |---|---|---|---|
-| **0. Spike** | 1–2 | Runs of SAM 2.1 T/S/B+, EdgeTAM and SAM 3.1 (PyTorch MPS and MLX) on a 16 GB M-series Mac over the test set (§12); peak memory, fps, quality and flicker. Apple Vision proposals tried. An attempted Core ML conversion of SAM 2.1's memory modules. | Models and stack chosen from **measured** numbers; go/no-go on 4K and on the Best tier. |
-| **1. MVP** | 4–6 | Open, click/box select, bidirectional tracking with bounded memory, feathered masks, transparent/colour background, ProRes 4444 / PNG sequence / MP4 export. | A 10-minute 1080p clip finishes inside the memory budget. |
-| **2. Usable tool** | 3–4 | Object list with Keep toggles, Auto-detect, corrections with partial re-tracking, confidence timeline, project save, image/blur backgrounds, HEVC alpha. | A non-expert gets an acceptable result on the test set without help. |
-| **3. Quality** | 3–5 | Matting tier, temporal smoothing, full-resolution 4K edges, HDR handling. | Flicker and edge metrics meet the bar set in Phase 0. |
-| **4. Ship** | 2–4 | Performance and thermal tuning, model download or bundling, signing and notarisation (and App Store sandboxing, if chosen), opt-in crash reporting, accessibility, docs. | Release candidate. |
+| **0. Spike** | 2 | On the M3 Ultra (capped at 6 GB), a 16 GB Mac and a Linux CUDA box: SAM 2.1 T/S/B+ and EdgeTAM tracking; Grounding DINO / MM-GDINO / LLMDet / OWLv2 / Florence-2 grounding; SAM 3.1 on CUDA as the quality reference. Peak memory, fps, J&F, flicker, phrase recall. The PyAV FFmpeg licence checked. | Default models chosen from **measured** numbers; the gap to SAM 3.1 known; go/no-go on the SAM 3.1 plug-in and on MLX. |
+| **1. MVP** | 4–6 | Open; typed phrase plus click/box selection; bidirectional tracking with bounded memory; feathered masks; transparent/colour background; ProRes 4444 / PNG / matte export. macOS and Linux/CUDA. | A 10-minute 1080p clip finishes inside the memory budget on both platforms. |
+| **2. Usable tool** | 3–4 | Re-detection with stable IDs, corrections with partial re-tracking, confidence timeline, project save, image/blur/video backgrounds, VP9/AV1 export. | A non-expert gets an acceptable result on the test set without help. |
+| **3. Quality and platforms** | 2–3 | Full-resolution 4K edges, temporal smoothing, HDR handling, ROCm best-effort, performance work (MLX if needed). | Flicker and edge metrics meet the bar set in Phase 0. |
+| **4. Ship** | 2–3 | macOS `.app` and Linux packages, model downloader showing each model's licence and checksum, the CI licence audit, docs. | Release candidate. |
+| *5. SAM 3.1 plug-in (optional)* | *2–4* | *A separate SAM-License repo: CUDA first, then macOS through MLX.* | *Opt-in install works without changing BBG's licence.* |
 
-**Total: about 13–21 weeks for one experienced engineer**, or about 2.5–4 months for two: one on app and video, one on ML deployment. This is a rough estimate until Phase 0 reports.
+**Total: about 13–18 weeks for one experienced engineer**, plus 2–4 weeks for the plug-in. Dropping matting saved about 2 weeks; supporting Linux adds about 2–3. This is a rough estimate until Phase 0 reports.
 
-**Skills:** Swift/SwiftUI, AVFoundation, Metal; ML deployment (PyTorch, `coremltools`, quantisation); video basics (codecs, colour, frame timing).
+**Skills:** Python/PyTorch ML deployment, Qt, FFmpeg and video basics (codecs, colour, timing), and Linux GPU stacks.
 
-**Hardware:** develop and test on the slowest target, a 16 GB M1 or M2 MacBook Air, not only on a large-memory desktop.
+**Hardware:**
+- the M3 Ultra Mac Studio for development,
+- a real 16 GB Apple Silicon Mac for QA,
+- an NVIDIA Linux box with 8–16 GB (a Jetson Orin NX 16 GB if unified memory on Linux matters).
 
 ## 12. Testing and acceptance
 
-**Test set** (about 12 clips, owned or licensed):
+**Test clips** (about 12, owned or licensed):
 - talking head
 - full-body motion
-- curly or loose hair
+- loose hair
 - a pet
 - two or more people crossing
 - an object held in a hand
 - an occlusion
 - fast motion with blur
 - low light
-- 4K iPhone HDR
+- 4K HDR
 - variable frame rate
 - a 10-minute clip
 
+**Phrase set:** about 30 phrases over those clips, from plain classes ("dog") to descriptions ("the man in the blue shirt").
+
 **Measures:**
 - J&F against hand-drawn masks on about 20 frames per clip,
-- flicker over time (dtSSD on the alpha),
+- phrase recall and precision per grounding model,
+- flicker (dtSSD on the alpha),
 - fps,
-- peak memory and swap use,
-- the number of corrections, and time, until the user is satisfied.
+- peak memory and swap,
+- the number of corrections until the user is satisfied.
 
 **MVP acceptance:**
-- the whole test set completes with no out-of-memory failure or swap growth,
-- each export opens correctly in Final Cut Pro and DaVinci Resolve,
-- audio stays in sync.
+- the whole test set completes on macOS and on Linux/CUDA with no out-of-memory failure or swap growth,
+- exports open in DaVinci Resolve, Kdenlive and Blender,
+- audio stays in sync,
+- the licence audit passes.
 
 ## 13. Out of scope (v1)
 
 - Live camera or virtual-webcam use.
-- Keeping an object's **shadows, reflections or smoke**. This is the "omnimatte" research area, too heavy for 16 GB today.
-- **Removing an object and filling the hole** (inpainting). That is the opposite job: here we keep the selection and drop everything else.
-- Cloud processing. Everything stays on the device.
-- Training or fine-tuning models.
+- Hair-level matting and semi-transparency (D4).
+- Keeping an object's shadows, reflections or smoke (the "omnimatte" research area).
+- Removing an object and filling the hole (inpainting).
+- Windows; cloud processing; training models.
 
-## 14. Decisions needed
+## 14. Decisions still needed
 
-1. **Platforms:** macOS only, or also iPad or Windows? (Decides §6.)
-2. **Distribution:** paid or free, App Store or direct download? Is Meta's SAM License acceptable? (Decides whether SAM 3.x and text prompts are possible.)
-3. **Minimum hardware and OS:** M1 and macOS 14? Or newer, to rely on newer Vision APIs?
-4. **Quality bar for v1:** clean object edges, or hair-level matting from the start?
-5. **Limits:** maximum resolution and length (4K? 10 minutes?).
-6. **Text prompts:** wanted in v1? (Only SAM 3.x offers them.)
+1. **SAM 3.1 vs D2:** option B (FOSS default plus an opt-in SAM 3.1 plug-in, recommended), option A (FOSS only), or option C (relax D2)? See §5.1.
+2. **Linux hardware:** is NVIDIA CUDA as tier 1 right? Does AMD (ROCm) or Jetson matter?
+3. **Licences:** is Apache-2.0 right for BBG itself? Are LGPL libraries (FFmpeg, Qt) acceptable under "fully unrestricted"?
+4. **Limits:** maximum resolution and length (assumed 4K and 10 minutes).
 
 ## Sources
 
-- SAM 2 repo (sizes, A100 speeds, Apache 2.0): https://github.com/facebookresearch/sam2
-- SAM 2 frame preloading: `sam2/utils/misc.py` and `sam2/sam2_video_predictor.py` in that repo
-- SAM License (SAM 3): https://github.com/facebookresearch/sam3/blob/main/LICENSE
-- SAM 3.1 release coverage: https://gigazine.net/gsc_news/en/20260331-meta-releasing-sam-3-1
-- EdgeTAM paper: https://arxiv.org/abs/2501.07256 · repo (Apache 2.0): https://github.com/facebookresearch/EdgeTAM
-- Apple Core ML SAM 2.1 (image-only): https://huggingface.co/apple/coreml-sam2.1-tiny
-- SAM 2.1 MLX port: https://github.com/eisneim/sam2.1_mlx
-- SAM 3 MLX builds: https://huggingface.co/mlx-community/sam3-8bit
-- WWDC26 session 237 (tap-to-segment): https://developer.apple.com/videos/play/wwdc2026/237/
-- BiRefNet (MIT): https://github.com/ZhengPeng7/BiRefNet
-- ViTMatte (MIT): https://github.com/hustvl/ViTMatte
-- BEN2 (MIT): https://github.com/PramaLLC/BEN2
-- RMBG-2.0 (CC BY-NC 4.0): https://github.com/Bria-AI/RMBG-2.0
-- MatAnyone (NTU S-Lab 1.0): https://pq-yang.github.io/projects/MatAnyone
+- SAM 2 repo (sizes, A100 speeds, Apache-2.0, MPS caveat in `notebooks/video_predictor_example.ipynb`): https://github.com/facebookresearch/sam2
+- SAM 3 / 3.1 repo (CUDA requirement, SAM License, 3.1 release): https://github.com/facebookresearch/sam3 · licence: https://github.com/facebookresearch/sam3/blob/main/LICENSE
+- SAM 3 paper (2× concept-segmentation accuracy, LVIS 48.8 vs 38.5): https://arxiv.org/abs/2511.16719
+- Open Source Definition: https://opensource.org/osd
+- EdgeTAM: https://arxiv.org/abs/2501.07256 · https://github.com/facebookresearch/EdgeTAM
+- Grounding DINO: https://github.com/IDEA-Research/GroundingDINO · Grounded-SAM-2: https://github.com/IDEA-Research/Grounded-SAM-2
+- MM-Grounding-DINO (MMDetection): https://github.com/open-mmlab/mmdetection
+- LLMDet: https://github.com/iSEE-Laboratory/LLMDet
+- OWLv2 (Scenic): https://github.com/google-research/scenic
+- Florence-2: https://huggingface.co/microsoft/Florence-2-large
+- MLX (Metal and CUDA backends): https://github.com/ml-explore/mlx
+- SAM 2.1 MLX port: https://github.com/eisneim/sam2.1_mlx · SAM 3 MLX builds: https://huggingface.co/mlx-community/sam3-8bit
+- PyAV: https://github.com/PyAV-Org/PyAV
+- macOS 27 compatibility (Apple Silicon only): https://www.macrumors.com/2026/04/18/macos-27-compatibility-change/ · https://appleinsider.com/articles/26/06/08/macos-27-compatibility-list-focuses-entirely-on-apple-silicon
+- ROCm on Strix Halo status: https://community.frame.work/t/linux-rocm-january-2026-stable-configurations-update/79876
+- YOLOE licence (AGPL-3.0): https://www.forasoft.com/learn/ai-for-video-engineering/articles-ai/open-vocabulary-detection-grounding-dino-florence-2-rtdetr-rfdetr
 - RobustVideoMatting (GPL-3.0): https://github.com/PeterL1n/RobustVideoMatting
