@@ -256,9 +256,16 @@ class MainWindow(QMainWindow):
         self.undo_key_button = QPushButton("Undo fix")
         self.undo_key_button.setToolTip("Remove the selected object's keyframe on this frame")
         self.undo_key_button.clicked.connect(self._clear_keyframe)
-        for b in (self.new_button, self.similar_button, self.delete_button, self.undo_key_button):
+        for b in (self.new_button, self.similar_button, self.delete_button):
             row.addWidget(b)
         ol.addLayout(row)
+        row2 = QHBoxLayout()
+        self.merge_button = QPushButton("Merge into…")
+        self.merge_button.setToolTip("Fold the selected object into another (e.g. a duplicate 'ball 2' into 'ball 1')")
+        self.merge_button.clicked.connect(self._merge_selected)
+        row2.addWidget(self.merge_button)
+        row2.addWidget(self.undo_key_button)
+        ol.addLayout(row2)
         hint = QLabel("Click = add to the selected object (or start one) · "
                       "⌥/Alt-click = subtract · drag = box")
         hint.setWordWrap(True)
@@ -567,6 +574,23 @@ class MainWindow(QMainWindow):
             self._start_busy("delete", "Deleting…")
             self._req("delete", self.selected)
 
+    def _merge_selected(self):
+        if self.selected is None or not self._can_prompt():
+            return
+        others = [o for o in self.project.objects.values() if o.id != self.selected]
+        if not others:
+            return
+        from PySide6.QtWidgets import QInputDialog
+
+        src = self.project.objects[self.selected]
+        label, ok = QInputDialog.getItem(self, "Merge", f"Merge '{src.label}' into:",
+                                         [o.label for o in others], 0, False)
+        if not ok:
+            return
+        dst = next(o for o in others if o.label == label)
+        self._start_busy("merge", "Merging…")
+        self._req("merge", src.id, dst.id)
+
     def _clear_keyframe(self):
         if self.selected is None or not self._can_prompt():
             return
@@ -675,7 +699,8 @@ class MainWindow(QMainWindow):
         for a in (self.a_track, self.a_export, self.a_save):
             a.setEnabled(has and idle)
         self.a_cancel.setEnabled(self.busy in ("track", "export"))
-        for w in (self.find_button, self.find_edit, self.delete_button, self.undo_key_button):
+        for w in (self.find_button, self.find_edit, self.delete_button, self.undo_key_button,
+                  self.merge_button):
             w.setEnabled(has and idle)
 
     # -- engine replies ---------------------------------------------------------------
@@ -702,6 +727,9 @@ class MainWindow(QMainWindow):
             self.similar_button.setChecked(False)
         elif op == "delete":
             self.selected = None
+        elif op == "merge":
+            self.selected = result
+            self.statusBar().showMessage("Merged. Track again to re-track around its keyframes.", 8000)
         elif op == "track":
             r = result
             msg = f"Tracked {r.frames} frames at {r.fps:.1f} fps"

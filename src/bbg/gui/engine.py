@@ -107,6 +107,14 @@ class Engine(QObject):
         self.project.save()
         return obj_id
 
+    def op_merge(self, src: int, dst: int):
+        self.project.merge_objects(src, dst)
+        if self.sel is not None:
+            self.sel.forget_clicks(src)
+            self.sel.forget_clicks(dst)
+        self.project.save()
+        return dst
+
     def op_clear_keyframe(self, frame: int, obj_id: int):
         """Undo a correction: drop the object's keyframe on this frame."""
         if len(self.project.anchor_frames(obj_id)) <= 1:

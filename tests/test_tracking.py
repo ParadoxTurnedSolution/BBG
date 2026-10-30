@@ -112,3 +112,21 @@ def test_flags(project):
             p.cache.put(o.id, f, m, 0.9)
     kinds = {(fl.frame, fl.kind) for fl in find_flags(p)}
     assert (5, "dropout") in kinds and (12, "jump") in kinds
+
+
+def test_merge_then_retrack(project, backend, clip):
+    p = project
+    ball, box = _select(p, backend)
+    Tracker(p, backend).run()
+    p.merge_objects(box.id, ball.id)
+    assert box.id not in p.objects and box.id not in p.cache.objects()
+    # Straight after the merge the masks are the union, keyframe included.
+    for f in (0, 10):
+        gt = np.maximum(_gt(clip[1], "ball", f, p.work_size), _gt(clip[1], "box", f, p.work_size))
+        assert j_score(p.cache.get(ball.id, f), gt) > 0.9
+    # The keyframe changed, so the merged object is planned for re-tracking.
+    # (The synthetic backend follows one colour per object, so the re-tracked
+    # result is only checked for completeness here; SAM tracks both parts.)
+    assert plan(p)
+    Tracker(p, backend).run()
+    assert plan(p) == []

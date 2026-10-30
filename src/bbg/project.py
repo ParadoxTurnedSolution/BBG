@@ -192,6 +192,39 @@ class Project:
         self._written.pop(oid, None)
         (self.root / "cache" / "tracks" / f"{oid}.owner.npy").unlink(missing_ok=True)
 
+    def merge_objects(self, src: int, dst: int) -> None:
+        """Fold `src` into `dst` (e.g. a duplicate made when an object re-emerged).
+
+        src's keyframes become dst's, unioned with dst's mask on those frames,
+        and src's tracked masks are unioned into dst's so the preview is right
+        at once. dst's keyframes have changed, so the next Track re-tracks the
+        spans around them.
+        """
+        if src == dst or src not in self.objects or dst not in self.objects:
+            raise ValueError("merge needs two different objects")
+        for f in self.anchor_frames(src):
+            a = self.anchor_mask(f, src)
+            b = self.anchor_mask(f, dst) if dst in self.anchors.get(f, {}) else self.cache.get(dst, f)
+            self.set_anchor(f, dst, a if b is None else np.maximum(a, b))
+        src_scores, dst_scores = self.cache.scores(src), self.cache.scores(dst)
+        dst_anchors = set(self.anchor_frames(dst))
+        for f in np.nonzero(~np.isnan(src_scores))[0]:
+            f = int(f)
+            if f in dst_anchors:
+                continue
+            a, b = self.cache.get(src, f), self.cache.get(dst, f)
+            if a is None:
+                continue
+            score = float(src_scores[f]) if np.isnan(dst_scores[f]) else max(float(src_scores[f]), float(dst_scores[f]))
+            self.cache.put(dst, f, a if b is None else np.maximum(a, b), score)
+        s, d = self.objects[src], self.objects[dst]
+        d.keep = d.keep or s.keep
+        if d.backward_limit is None or s.backward_limit is None:
+            d.backward_limit = None
+        else:
+            d.backward_limit = min(d.backward_limit, s.backward_limit)
+        self.remove_object(src)
+
     # -- keyframes --------------------------------------------------------
 
     def set_anchor(self, frame: int, oid: int, mask: np.ndarray) -> None:

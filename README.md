@@ -22,7 +22,7 @@ weights**: that is Phase 0, which has to run on a Mac ([spike/](spike/README.md)
 | Export: ProRes 4444 / WebM with alpha, PNG, matte, H.264/HEVC flattened, audio passthrough | done | tests decode the output and check alpha, timing and audio |
 | HEVC with alpha (`hevc_videotoolbox`) | written | **untested**: needs macOS |
 | Tracking: keyframes, nearest-keyframe ownership, partial re-tracking, re-detection of typed phrases, flags | done | tests with the synthetic backend (J > 0.95 against ground truth) |
-| SAM 3.1 backend (mlx-vlm 0.7.11) | written | `tests/test_sam3_backend.py` runs mlx-vlm's real SAM 3.1 code with random weights in a shallow config (shapes, object order, bounded tracker memory, the full tracker loop): **result pending** at this commit. Mask quality and speed: not measured |
+| SAM 3.1 backend (mlx-vlm 0.7.11) | done | `tests/test_sam3_backend.py` (3 tests, passing) runs mlx-vlm's real SAM 3.1 code with random weights in a shallow, narrow config. It checks phrase detection, clicks with refinement, session start, object order on add, that tracker memory stays bounded, and the full tracker loop through the backend. **Mask quality and speed: not measured** (needs the real weights on a Mac) |
 | GUI (PySide6) | done | offscreen end-to-end test: select, track, view modes, export |
 | Phase 0 spike harness | done | dry run with the synthetic backend |
 | macOS packaging (`.app`) | config only | `[tool.briefcase]` in pyproject; not built |
@@ -58,6 +58,7 @@ real footage.
 - **Drag** a box for a new object. With *Find similar* on, the box finds every look-alike instead.
 - **▶ Track.** The timeline shows where each object is, its keyframes (◆) and flags (red).
 - Jump between flags with ⚑◀ / ▶⚑. Click to fix a frame, then Track again: only that span is re-tracked.
+- **Merge into…** folds a duplicate (say, "ball 2" after the ball re-emerged) into the original. Track again afterwards.
 - Untick objects you don't want, choose a background, then **Export**.
 
 **CLI.**
@@ -115,8 +116,8 @@ pytest -m slow                                   # SAM 3.1 plumbing, random weig
 
 The slow tests build mlx-vlm's SAM 3.1 with random weights in a shallow
 configuration: one backbone layer, one detector layer. On Linux, MLX's CPU
-build is single-threaded and needs minutes per frame. On a Mac they run on
-Metal.
+build is single-threaded: the three tests take about 35 minutes. On a Mac
+they run on Metal.
 
 `mlx-vlm` is pinned: `backends/sam3_mlx.py` calls its SAM 3.1 internals, and
 the docstring there lists what it relies on.
@@ -132,6 +133,6 @@ the docstring there lists what it relies on.
 
 - **No real-weight results yet.** Mask quality, speed and peak memory on a 16 GB Mac are unmeasured until Phase 0.
 - **Short phrases only.** SAM 3.1 is built for short phrases. For "the man on the left", type "man" and untick the others.
-- **Duplicate objects.** Re-detection can create a duplicate when a tracked object re-emerges somewhere its track didn't follow: it appears as e.g. "ball 2". Both are kept by default, so the output is right, but there is no "merge into" action yet.
+- **Duplicate objects.** Re-detection can create a duplicate when a tracked object re-emerges somewhere its track didn't follow: it appears as e.g. "ball 2". Both are kept by default, so the output is right. Use *Merge into…* to tidy the list.
 - **Fast quality is approximate.** It tracks every other frame and averages the skipped frames from their neighbours. Fast motion will lag on those frames.
 - **Shadows and reflections aren't included.** They aren't part of the object (SCOPE §13).
