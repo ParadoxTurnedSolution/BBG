@@ -1,208 +1,286 @@
 # BBG — Background Be Gone
 
-On-device video background removal for Apple Silicon Macs with 16 GB of
-unified memory. Type what to keep ("dog", "person") or click it, BBG tracks
-it through the clip with Meta's SAM 3.1, you fix any frame it flags, and
-export with the background removed or replaced. Nothing leaves the Mac.
+BBG removes the background from a video on your Mac. Type what you want to
+keep ("dog", "person"), or click on it. BBG follows it through the whole
+clip. You fix any moment it got wrong, and save the result with the
+background gone or replaced. Everything happens on your Mac; nothing is
+uploaded.
 
-![BBG main window: a synthetic test clip after tracking](docs/screenshot.png)
+![BBG's window](docs/screenshot.png)
 
-*The screenshot uses the synthetic test backend, not SAM 3.1.*
+> **Early version.** BBG hasn't been tried on a Mac yet: it was built and
+> tested on another computer. If anything below doesn't go as described,
+> write down what the screen says (or take a screenshot).
 
-Scope, decisions and plan: [SCOPE.md](SCOPE.md).
+---
 
-## Status
+## Contents
+
+1. [What you need](#what-you-need)
+2. [Install BBG](#install-bbg-once-about-15-minutes): four steps, about 15 minutes, once
+3. [Start BBG](#start-bbg)
+4. [Remove a background](#remove-a-background-step-by-step): step by step
+5. [Update BBG](#update-bbg) · [Uninstall](#uninstall-bbg)
+6. [If something goes wrong](#if-something-goes-wrong)
+7. [Technical details](#technical-details) (for developers)
+
+---
+
+## What you need
+
+Check these first: Apple menu (top-left corner of the screen) → **About This Mac**.
+
+| You need | Where to look in About This Mac | |
+|---|---|---|
+| An **Apple chip**: M1, M2, M3, M4, M5 or later | **Chip** says "Apple M…" | If it says "Intel", BBG can't run on this Mac |
+| **macOS 14** (Sonoma) or newer | **macOS** line | Older? Update it: System Settings → General → Software Update |
+| **16 GB** of memory or more | **Memory** | Less works, but slowly |
+
+You also need:
+- **4 GB of free disk space.**
+- **An internet connection** while installing. After that, BBG works offline.
+- **Your GitHub sign-in.** BBG's page is private.
+
+---
+
+## Install BBG (once, about 15 minutes)
+
+### Step 1 — Install Python
+
+BBG is written in Python, so the Mac needs a recent copy of it.
+
+1. Go to **[python.org/downloads](https://www.python.org/downloads/)**.
+2. Click the big yellow **Download Python 3.…** button.
+3. Open the file it downloads (it's in your **Downloads** folder, called something like `python-3.14.0-macos11.pkg`).
+4. Click **Continue**, **Continue**, **Agree**, **Install**. Type your Mac password if it asks, then **Close**.
+
+A Finder window called "Python 3.…" may open at the end. You can close it.
+
+> Already have Python? The installer in step 3 checks it and tells you if it's not new enough.
+
+### Step 2 — Download BBG
+
+1. Go to **[github.com/ParadoxTurnedSolution/BBG](https://github.com/ParadoxTurnedSolution/BBG)** and sign in if GitHub asks.
+2. Click the green **<> Code** button, then **Download ZIP**.
+3. Look in your **Downloads** folder:
+   - If there is a folder called **`BBG-main`**: good, go to step 3.
+   - If there is a file called **`BBG-main.zip`**: double-click it, and the `BBG-main` folder appears next to it.
+
+Don't open or move anything inside the folder.
+
+### Step 3 — Run the installer
+
+1. Open **Terminal**: press **⌘ Space**, type **Terminal**, press **Return**.
+   A window with a line of text and a blinking cursor opens.
+2. Copy this line. (On GitHub, hover over the box and click the copy icon on its right.)
+
+   ```bash
+   bash ~/Downloads/BBG-main/install.sh
+   ```
+
+3. Click in the Terminal window, paste with **⌘ V**, and press **Return**.
+
+The installer checks your Mac, moves BBG into your home folder (as a folder
+called **BBG**), and installs what BBG needs. Text scrolls past for 5 to 10
+minutes; that's normal. It shows its progress as **1/4** to **4/4**.
+
+**At 4/4 it asks about the model.** BBG uses Meta's **SAM 3.1** model to
+recognise objects (about 1.8 GB, downloaded once). It shows Meta's licence
+terms. The model may be used freely, but not for military or weapons
+purposes. To accept, type **y** and press **Return**, then wait for the
+download.
+
+**It's finished when it says `Done: BBG is installed.`** A Finder window
+opens showing your BBG folder. You can close Terminal.
+
+If it stops with a red **✗** line, read the message under it: it says what
+to do. The most common one is "Python 3.11 or newer isn't installed" (do
+step 1, then paste the same line again).
+
+### Step 4 — Make BBG easy to find (optional)
+
+In the **BBG** folder that opened, find **`BBG.command`**. Drag it into the
+right-hand end of the **Dock** (next to the Trash). From then on, one click
+there starts BBG.
+
+---
+
+## Start BBG
+
+Double-click **`BBG.command`**. It's in the **BBG** folder in your home folder:
+in Finder, **Go → Home → BBG**.
+
+- **Two windows open:** a Terminal window, then BBG itself. **Leave the Terminal window open** while you use BBG. It shows what BBG is doing, and any error messages. Close it after you quit BBG.
+- **The first start takes a little longer** while the model loads.
+- **If you skipped the model download** during install, BBG asks now. Click **Yes**.
+
+---
+
+## Remove a background, step by step
+
+1. **Open your video.** Click **Open video…** at the top left and choose the clip.
+   - BBG makes a folder next to the video, named after it (e.g. `holiday.bbg`), where it keeps its work.
+   - If you open the same video later, BBG asks whether to continue where you left off.
+
+2. **Tell BBG what to keep.** Either:
+   - **Type it.** In the **Find** box on the right, type a short word or two ("dog", "person", "red car") and press **Return**. Everything that matches gets a coloured outline and appears in the **Objects** list.
+   - **Click it.** Click on the thing in the picture. Click again on parts it missed. **⌥ Option-click** on parts it shouldn't have included.
+   - **Draw round it.** Press and drag a box around it.
+
+   To start a *second* object by clicking, press **+ New** first. Otherwise your click adds to the object that's selected in the list.
+
+3. **Press ▶ Track** (top). BBG follows every object through the whole clip. A bar at the bottom shows the progress and the time left. You can keep watching; **Cancel** stops it.
+
+4. **Check the result.** Use the controls under the picture:
+
+   | Control | What it does |
+   |---|---|
+   | **◀ ▶** (or the ← → keys) | Step one frame back or forward |
+   | **▶ Play** (or Space) | Play the clip |
+   | **⚑◀ ▶⚑** | Jump to the moments BBG marked as doubtful (red marks on the timeline) |
+   | The **timeline** | One coloured bar per object, showing where it is in the clip. Click anywhere on it to jump there |
+
+5. **Fix any mistakes.** Go to a frame where an outline is wrong. Select the object in the list, then click on the parts it missed (⌥ Option-click for parts it shouldn't have). Press **▶ Track** again. Only the part of the clip near your fix is redone.
+   - **Undo fix** removes your correction on the current frame.
+   - If an object shows up twice in the list (e.g. "dog 1" and "dog 2" for the same dog), select one, click **Merge into…** and choose the other. Then Track again.
+
+6. **Choose what stays.** The tick box next to each object decides whether it stays in the final video. Untick anything you want removed with the background.
+
+7. **Choose the background** (right-hand side). The **Result** view shows how it will look.
+
+   | Background | Result |
+   |---|---|
+   | **Transparent** | No background at all, for putting the clip over something else in an editing app |
+   | **Colour** | A plain colour (click **Choose…**). Green is the default |
+   | **Image** | A picture of your choice (click **Choose…**) |
+   | **Blur** | The original background, blurred |
+   | **Video** | Another video (click **Choose…**) |
+
+   **Edges:** *Grow / shrink* moves the outline outwards or inwards. *Feather* softens it. *Smoothing* calms flickering edges.
+
+8. **Save the result.** Click **Export…**, choose a format, and click **OK**. The new video is saved next to the original unless you choose somewhere else.
+
+   | If you want to… | Choose |
+   |---|---|
+   | Edit it further in Final Cut, Premiere, DaVinci Resolve or iMovie | **ProRes 4444 with alpha** (big files, keeps transparency) |
+   | Use it in Apple apps (Keynote, Final Cut, Motion) with smaller files | **HEVC with alpha** |
+   | Post or send it, with the new background | **H.264** (plays everywhere) or **HEVC** (smaller). Pick a background other than *Transparent* first |
+   | Put it on a website | **VP9 with alpha (.webm)** |
+   | Get every frame as a picture | **PNG sequence** |
+   | Get the black-and-white cut-out shape only | **Matte only** |
+
+BBG saves its work as you go. The `.bbg` folder next to your video can be
+deleted once you're happy with the export; it can be large.
+
+---
+
+## Update BBG
+
+Updating is the same as installing:
+
+1. Download BBG again ([step 2](#step-2--download-bbg)), so that a fresh `BBG-main` folder is in Downloads.
+2. In Terminal, paste the same line as before and press **Return**:
+
+   ```bash
+   bash ~/Downloads/BBG-main/install.sh
+   ```
+
+3. When it says **Done**, there is a folder called **BBG-old-** followed by a
+   date in your home folder: that's the previous version. Once the new one
+   works, drag it to the Trash.
+
+The model isn't downloaded again, and your projects (the `.bbg` folders next
+to your videos) are untouched.
+
+If you put BBG.command in the Dock, drag that Dock icon out (it may still
+point at the old copy) and drag in the new **BBG.command** from the BBG folder.
+
+## Uninstall BBG
+
+1. Drag the **BBG** folder (in your home folder) to the Trash, and any **BBG-old-…** folders. If BBG.command is in the Dock, drag it out.
+2. To free the model's 1.8 GB too, paste this into Terminal and press **Return**:
+
+   ```bash
+   rm -rf ~/.cache/huggingface/hub/models--mlx-community--sam3.1-bf16
+   ```
+
+3. Delete any `.bbg` folders next to your videos.
+
+---
+
+## If something goes wrong
+
+| What happens | What to do |
+|---|---|
+| Terminal says **`No such file or directory`** | The `BBG-main` folder isn't in Downloads. Do [step 2](#step-2--download-bbg) again, and double-click the ZIP if there is one. If your browser saved it as `BBG-main 2`, delete the old `BBG-main` folder and rename the new one |
+| **"There is already a folder called BBG in your home folder, and it isn't BBG"** | You have a folder of your own called BBG. Rename it (click its name in Finder, press Return, type a new name), then paste the install line again |
+| **"Python 3.11 or newer isn't installed"** | Do [step 1](#step-1--install-python), then paste the install line again |
+| **"This Mac doesn't have an Apple chip"** | BBG can't run on Intel Macs |
+| **"Terminal is running under Rosetta"** | Follow the instructions it prints, then try again |
+| **"Something went wrong"** while installing | Usually the internet connection. Paste the same line again |
+| The model download says **401**, **403**, or asks you to **log in** | Create a free account at [huggingface.co](https://huggingface.co), open the [model's page](https://huggingface.co/mlx-community/sam3.1-bf16) and accept its terms if asked, then make a token (your picture → Settings → Access Tokens → Create, type "Read"). Paste `cd ~/BBG && .venv/bin/hf auth login` into Terminal, paste the token when asked, then `.venv/bin/bbg-cli download-model` |
+| **CERTIFICATE_VERIFY_FAILED** in Terminal | In Finder, open Applications → Python 3.… and double-click **Install Certificates.command**. Then try again |
+| Double-clicking BBG.command says it **"can't be opened"** or is from an **"unidentified developer"** | Open System Settings → Privacy & Security, scroll down, click **Open Anyway** next to BBG.command. Or paste `bash ~/BBG/BBG.command` into Terminal |
+| BBG.command says **"BBG isn't installed yet"** | Paste `bash ~/BBG/install.sh` into Terminal |
+| BBG.command says the folder **"was moved or renamed"** | Type **y** and press Return: it repairs itself in a few minutes |
+| BBG is **very slow**, or the Mac is struggling | Quit other apps (especially web browsers with many tabs). Choose **Fast** next to *Quality* before pressing Track |
+| An outline is **wrong in a few places** | Fix it on the worst frame and Track again ([step 5](#remove-a-background-step-by-step)) |
+| **Shadows or reflections** aren't kept | BBG keeps the object itself, not its shadow |
+| Anything else | The Terminal window that opened with BBG shows the error. Copy it, or take a screenshot |
+
+---
+
+## Technical details
+
+Everything below is for developers.
+
+### Status
 
 The v1 pipeline and GUI are built. It has **not yet run with the real SAM 3.1
-weights**: that is Phase 0, which has to run on a Mac ([spike/](spike/README.md)).
+weights**: that is Phase 0 of [SCOPE.md](SCOPE.md), which has to run on a
+Mac ([spike/](spike/README.md)). The screenshot above uses the synthetic test
+backend, not SAM 3.1.
 
 | Part | State | How it was checked |
 |---|---|---|
 | Video in/out: exact frame index, VFR, rotation, backwards decoding | done | tests, against the FFmpeg CLI |
 | Export: ProRes 4444 / WebM with alpha, PNG, matte, H.264/HEVC flattened, audio passthrough | done | tests decode the output and check alpha, timing and audio |
 | HEVC with alpha (`hevc_videotoolbox`) | written | **untested**: needs macOS |
-| Tracking: keyframes, nearest-keyframe ownership, partial re-tracking, re-detection of typed phrases, flags | done | tests with the synthetic backend (J > 0.95 against ground truth) |
-| SAM 3.1 backend (mlx-vlm 0.7.11) | done | `tests/test_sam3_backend.py` (3 tests, passing) runs mlx-vlm's real SAM 3.1 code with random weights in a shallow, narrow config. It checks phrase detection, clicks with refinement, session start, object order on add, that tracker memory stays bounded, and the full tracker loop through the backend. **Mask quality and speed: not measured** (needs the real weights on a Mac) |
+| Tracking: keyframes, nearest-keyframe ownership, partial re-tracking, re-detection of typed phrases, flags, merge | done | tests with the synthetic backend (J > 0.95 against ground truth) |
+| SAM 3.1 backend (mlx-vlm 0.7.11) | done | `tests/test_sam3_backend.py` (3 tests, passing) runs mlx-vlm's real SAM 3.1 code with random weights in a shallow, narrow config. It checks phrase detection, clicks with refinement, session start, object order on add, that tracker memory stays bounded, and the full tracker loop through the backend. **Mask quality and speed: not measured** |
 | GUI (PySide6) | done | offscreen end-to-end test: select, track, view modes, export |
+| `install.sh`, `BBG.command` | done | shellcheck. Run on Linux with the Mac checks and model download skipped, in the flows the README describes: install from Downloads, start, start after renaming the folder (self-repair), update with the same command, a foreign `~/BBG` left alone. **Not yet run on a Mac** |
 | Phase 0 spike harness | done | dry run with the synthetic backend |
-| macOS packaging (`.app`) | config only | `[tool.briefcase]` in pyproject; not built |
+| macOS `.app` | config only | `[tool.briefcase]` in pyproject; not built |
 
-## Install
-
-There is no double-click app yet. You install BBG from source with Python,
-once, and then start it from Terminal.
-
-> These steps haven't been run on a Mac yet (BBG was built and tested on
-> Linux). If a step fails, the error message is what's needed to fix it.
-
-### What you need
-
-- **A Mac with Apple Silicon** (M1 or later) and **macOS 14 or later.** SAM 3.1 runs on the Mac's GPU through Apple's MLX, which doesn't exist for Intel Macs.
-- **16 GB of memory or more.**
-- **About 3 GB of free disk:** roughly 1 GB for the software, 1.8 GB for the model.
-- **An internet connection** for installing. After that, BBG runs offline.
-
-### 1. Install Python and Git (once)
-
-Open **Terminal** (Applications → Utilities). Check whether Git is there:
+### Developer install
 
 ```bash
-git --version
-```
-
-If macOS offers to install the *command line developer tools*, accept, wait
-for it to finish, and run `git --version` again.
-
-BBG needs **Python 3.11 or newer**. The Python that comes with the developer
-tools (3.9) is too old. The simplest route is the official installer:
-
-1. Download **Python 3.12** for macOS from [python.org/downloads/macos](https://www.python.org/downloads/macos/) and run it.
-2. Check it worked:
-
-   ```bash
-   python3.12 --version
-   ```
-
-   ```bash
-   python3.12 -c "import platform; print(platform.machine())"
-   ```
-
-   The second command must print `arm64`. If it prints `x86_64`, that Python
-   runs under Rosetta and MLX won't install. Use the macOS 64-bit universal2
-   installer from python.org, or Homebrew on Apple Silicon.
-
-If you use [Homebrew](https://brew.sh), `brew install python@3.12` does the same.
-
-### 2. Get BBG
-
-Until it is merged into `main`, the code is on the branch
-`claude/gracious-turing-4xx1s7`. This puts it in a `BBG` folder in your home folder:
-
-```bash
-cd ~ && git clone --branch claude/gracious-turing-4xx1s7 https://github.com/ParadoxTurnedSolution/BBG.git
-```
-
-The repository is private, so Git will ask you to sign in to GitHub. When it
-asks for a password, give it a *personal access token*, not your account
-password (GitHub → Settings → Developer settings → Personal access tokens).
-Or sign in once with the GitHub CLI (`brew install gh`, then `gh auth login`)
-and Git will use that.
-
-### 3. Install BBG and its libraries
-
-This makes a private Python environment inside the `BBG` folder, so nothing
-is installed system-wide:
-
-```bash
-cd ~/BBG && python3.12 -m venv .venv
+git clone https://github.com/ParadoxTurnedSolution/BBG.git && cd BBG
 ```
 
 ```bash
-source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate && pip install -e ".[sam3,gui,dev]"
+```
+
+Every dependency installs from prebuilt arm64 wheels on Python 3.11 to 3.14
+(nothing to compile). MLX needs macOS 14 or later.
+
+### Without the model
+
+```bash
+bbg-cli demo /tmp/bbg-demo
 ```
 
 ```bash
-pip install --upgrade pip && pip install -e ".[sam3,gui]"
+bbg --backend synthetic /tmp/bbg-demo/demo.mp4
 ```
 
-This takes a few minutes. It installs MLX, mlx-vlm (SAM 3.1), PySide6 (the
-window), PyAV (FFmpeg) and OpenCV.
+The synthetic backend segments the generated test clips by colour ("ball",
+"box", "dog"). It exists for tests and for trying the interface; it can't
+segment real footage.
 
-### 4. Download the model (once)
-
-```bash
-bbg-cli download-model
-```
-
-It shows the SAM License terms and asks you to accept. Then it downloads
-`mlx-community/sam3.1-bf16` (about 1.8 GB) into `~/.cache/huggingface`.
-You can skip this step: the app asks the same question the first time it
-starts.
-
-If the download stops with an access or login error, the model page wants
-a Hugging Face account:
-1. Create a free account at [huggingface.co](https://huggingface.co).
-2. Open the model's page and accept its terms if it asks.
-3. Make a read token (Settings → Access Tokens), then run:
-
-   ```bash
-   hf auth login
-   ```
-
-4. Run `bbg-cli download-model` again.
-
-### 5. Start it
-
-```bash
-bbg
-```
-
-Or open a clip straight away:
-
-```bash
-bbg ~/Movies/clip.mov
-```
-
-**Every new Terminal window** needs the environment switched on before `bbg` works:
-
-```bash
-cd ~/BBG && source .venv/bin/activate
-```
-
-### Check the install without the model
-
-This runs the whole pipeline on a generated test clip (a ball, a box and a
-"dog" in flat colours), using a stand-in that segments by colour instead of
-SAM 3.1. It finishes in seconds:
-
-```bash
-bbg-cli demo ~/bbg-demo
-```
-
-It writes `~/bbg-demo/demo_prores4444.mov` with the box removed. To try the
-window on the same clip:
-
-```bash
-bbg --backend synthetic ~/bbg-demo/demo.mp4
-```
-
-The stand-in only understands those test clips. On real footage, use plain `bbg`.
-
-### Updating
-
-```bash
-cd ~/BBG && source .venv/bin/activate && git pull && pip install -e ".[sam3,gui]"
-```
-
-### Uninstalling
-
-Delete the `~/BBG` folder. The model is in
-`~/.cache/huggingface/hub/models--mlx-community--sam3.1-bf16`; delete that too
-to free its 1.8 GB. Each clip's project is a `.bbg` folder next to the clip.
-
-### If something goes wrong
-
-| Problem | Fix |
-|---|---|
-| `command not found: bbg` | The environment isn't switched on: `cd ~/BBG && source .venv/bin/activate` |
-| `No matching distribution found for mlx` | Python isn't arm64 (step 1 check), or is older than 3.11 |
-| `requires a different Python` | Use `python3.12` when making the environment (step 3) |
-| The window doesn't open, or Qt errors | Run `pip install --force-reinstall PySide6-Essentials` inside the environment |
-| Download fails with 401/403 | See the Hugging Face login steps in step 4 |
-| It's slow or the Mac swaps | Quit other apps; choose *Fast* quality. That and the 16 GB budget are exactly what Phase 0 measures |
-
-## Use
-
-**GUI.** Open a clip, then:
-- **Find:** type a short phrase. Every match becomes an object.
-- **Click** to start an object or add to the selected one. **⌥-click** subtracts.
-- **Drag** a box for a new object. With *Find similar* on, the box finds every look-alike instead.
-- **▶ Track.** The timeline shows where each object is, its keyframes (◆) and flags (red).
-- Jump between flags with ⚑◀ / ▶⚑. Click to fix a frame, then Track again: only that span is re-tracked.
-- **Merge into…** folds a duplicate (say, "ball 2" after the ball re-emerged) into the original. Track again afterwards.
-- Untick objects you don't want, choose a background, then **Export**.
-
-**CLI.**
+### Command line
 
 ```bash
 bbg-cli track clip.mov --phrase person --click 812,430@120 --report track.json
@@ -215,7 +293,7 @@ Formats: `prores4444`, `hevc_alpha` (macOS), `webm`, `png` (with alpha);
 `matte`; `h264`, `hevc` (need a background). Click and box coordinates are
 source pixels, `@frame` optional.
 
-## How it works
+### How it works
 
 ```
 src/bbg/
@@ -226,10 +304,11 @@ src/bbg/
   tracking.py        planning (who owns each frame) and the tracking loop, re-detection, flags
   masks/             on-disk mask cache; guided upsampling, grow/shrink, feather, temporal smoothing
   export.py          kept objects over a background, full resolution
-  project.py         the .bbg project folder
+  project.py         the .bbg project folder, merging objects
   gui/               PySide6 window; the engine thread that owns the model
   cli.py, metrics.py, memory.py, synthetic.py
 spike/               Phase 0 measurement harness
+install.sh, BBG.command   the end-user installer and launcher
 ```
 
 **Memory stays flat with clip length.**
@@ -244,33 +323,34 @@ spike/               Phase 0 measurement harness
 
 **Edges.**
 - The model's mask (1024 px) is upsampled to full resolution with a fast guided filter, so its edge lands on the picture's edge.
-- It is then sharpened to a clean edge, and your Grow/Shrink and Feather settings are applied.
+- It is then sharpened to a clean edge, and grow/shrink and feather are applied.
 
-## Development
+### Tests
 
 ```bash
-pip install -e ".[gui,dev]"
-QT_QPA_PLATFORM=offscreen pytest                 # fast suite (synthetic backend, GUI offscreen)
-pip install "mlx[cpu]" mlx-vlm==0.7.11           # Linux: CPU MLX for the next line
-pytest -m slow                                   # SAM 3.1 plumbing, random weights
+QT_QPA_PLATFORM=offscreen pytest
 ```
 
-The slow tests build mlx-vlm's SAM 3.1 with random weights in a shallow
-configuration: one backbone layer, one detector layer. On Linux, MLX's CPU
-build is single-threaded: the three tests take about 35 minutes. On a Mac
-they run on Metal.
+```bash
+pytest -m slow
+```
+
+The first is the fast suite: synthetic backend, GUI offscreen. The second
+runs mlx-vlm's real SAM 3.1 code with random weights; on Linux, install
+`mlx[cpu]` first. MLX's Linux CPU build is single-threaded, so the slow
+tests take about 35 minutes there; on a Mac they run on Metal.
 
 `mlx-vlm` is pinned: `backends/sam3_mlx.py` calls its SAM 3.1 internals, and
 the docstring there lists what it relies on.
 
-## Licences
+### Licences
 
 - **BBG's code:** Apache-2.0 ([LICENSE](LICENSE)).
 - **SAM 3.1 weights:** Meta's SAM License, not Apache-2.0. They are downloaded at first run, after a prompt, and never shipped with BBG.
 - **mlx-vlm's SAM 3.1 port:** mlx-vlm itself is MIT, but this port is derived from Meta's SAM 3 code.
 - **FFmpeg:** PyAV's prebuilt wheels bundle an FFmpeg build that includes GPL encoders (x264, x265). Before distributing a packaged `.app`, either meet the GPL for that bundle or build PyAV against an LGPL FFmpeg.
 
-## Known limitations
+### Known limitations
 
 - **No real-weight results yet.** Mask quality, speed and peak memory on a 16 GB Mac are unmeasured until Phase 0.
 - **Short phrases only.** SAM 3.1 is built for short phrases. For "the man on the left", type "man" and untick the others.
