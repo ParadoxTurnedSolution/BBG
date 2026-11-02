@@ -90,29 +90,41 @@ terms. The model may be used freely, but not for military or weapons
 purposes. To accept, type **y** and press **Return**, then wait for the
 download.
 
-**It's finished when it says `Done: BBG is installed.`** A Finder window
-opens showing your BBG folder. You can close Terminal.
+**It's finished when it says `Done: BBG is installed.`** BBG then opens
+by itself. **Close the Terminal window**: BBG doesn't need it, and you won't
+need Terminal again (except to update BBG).
 
 If it stops with a red **✗** line, read the message under it: it says what
 to do. The most common one is "Python 3.11 or newer isn't installed" (do
 step 1, then paste the same line again).
 
-### Step 4 — Make BBG easy to find (optional)
+> **Why is there a Terminal step at all?** Apps you download have to be
+> signed by Apple's developer programme, or macOS refuses to open them. BBG
+> isn't signed yet. Installing through Terminal builds BBG on your own Mac,
+> which macOS accepts. After this one step, BBG is an ordinary app.
 
-In the **BBG** folder that opened, find **`BBG.command`**. Drag it into the
-right-hand end of the **Dock** (next to the Trash). From then on, one click
-there starts BBG.
+### Step 4 — Put BBG in the Dock (optional)
+
+Open **Finder**, click **Applications** in the sidebar, find **BBG** (the
+icon with a person on a checkerboard), and drag it into the **Dock**. From
+then on, one click there starts BBG.
 
 ---
 
 ## Start BBG
 
-Double-click **`BBG.command`**. It's in the **BBG** folder in your home folder:
-in Finder, **Go → Home → BBG**.
+Open BBG like any other app. Any of these works:
+- **Spotlight:** press **⌘ Space**, type **BBG**, press **Return**.
+- **Finder:** open **Applications** and double-click **BBG**.
+- **The Dock:** if you put it there ([step 4](#step-4--put-bbg-in-the-dock-optional)).
 
-- **Two windows open:** a Terminal window, then BBG itself. **Leave the Terminal window open** while you use BBG. It shows what BBG is doing, and any error messages. Close it after you quit BBG.
+No Terminal window appears.
+
 - **The first start takes a little longer** while the model loads.
 - **If you skipped the model download** during install, BBG asks now. Click **Yes**.
+- **macOS may ask** whether BBG may use your Desktop, Documents or Downloads folder. Click **Allow**: BBG needs to read your videos and save its results next to them.
+- **If BBG needs your attention,** it says so in an ordinary message window.
+- **If a notification says BBG is repairing itself** (after a macOS or Python update, say), wait a few minutes: BBG opens by itself when it's done.
 
 ---
 
@@ -190,21 +202,20 @@ Updating is the same as installing:
    works, drag it to the Trash.
 
 The model isn't downloaded again, and your projects (the `.bbg` folders next
-to your videos) are untouched.
-
-If you put BBG.command in the Dock, drag that Dock icon out (it may still
-point at the old copy) and drag in the new **BBG.command** from the BBG folder.
+to your videos) are untouched. The BBG app in Applications is replaced with
+the new version, so Spotlight and the Dock open the new one.
 
 ## Uninstall BBG
 
-1. Drag the **BBG** folder (in your home folder) to the Trash, and any **BBG-old-…** folders. If BBG.command is in the Dock, drag it out.
-2. To free the model's 1.8 GB too, paste this into Terminal and press **Return**:
+1. Quit BBG. Drag **BBG** from **Applications** to the Trash (and out of the Dock, if it's there).
+2. Drag the **BBG** folder (in your home folder) to the Trash, and any **BBG-old-…** folders.
+3. To free the model's 1.8 GB too, paste this into Terminal and press **Return**:
 
    ```bash
    rm -rf ~/.cache/huggingface/hub/models--mlx-community--sam3.1-bf16
    ```
 
-3. Delete any `.bbg` folders next to your videos.
+4. Delete any `.bbg` folders next to your videos. BBG's log is in your home folder's Library → Logs → BBG; that can go too.
 
 ---
 
@@ -220,13 +231,15 @@ point at the old copy) and drag in the new **BBG.command** from the BBG folder.
 | **"Something went wrong"** while installing | Usually the internet connection. Paste the same line again |
 | The model download says **401**, **403**, or asks you to **log in** | Create a free account at [huggingface.co](https://huggingface.co), open the [model's page](https://huggingface.co/mlx-community/sam3.1-bf16) and accept its terms if asked, then make a token (your picture → Settings → Access Tokens → Create, type "Read"). Paste `cd ~/BBG && .venv/bin/hf auth login` into Terminal, paste the token when asked, then `.venv/bin/bbg-cli download-model` |
 | **CERTIFICATE_VERIFY_FAILED** in Terminal | In Finder, open Applications → Python 3.… and double-click **Install Certificates.command**. Then try again |
-| Double-clicking BBG.command says it **"can't be opened"** or is from an **"unidentified developer"** | Open System Settings → Privacy & Security, scroll down, click **Open Anyway** next to BBG.command. Or paste `bash ~/BBG/BBG.command` into Terminal |
-| BBG.command says **"BBG isn't installed yet"** | Paste `bash ~/BBG/install.sh` into Terminal |
-| BBG.command says the folder **"was moved or renamed"** | Type **y** and press Return: it repairs itself in a few minutes |
+| **"BBG can't find its files"** when opening BBG | The BBG folder in your home folder was moved, renamed or deleted. Put it back, or install again ([step 2](#step-2--download-bbg) and [step 3](#step-3--run-the-installer)) |
+| **"BBG couldn't repair itself"** | Install again ([step 2](#step-2--download-bbg) and [step 3](#step-3--run-the-installer)). Your projects and the model are kept |
+| macOS says BBG **"can't be opened"**, or is from an **"unidentified developer"** | Open System Settings → Privacy & Security, scroll down, and click **Open Anyway** next to BBG. (This shouldn't happen, because the installer builds BBG on your Mac) |
+| You clicked **Don't Allow** when macOS asked about a folder | System Settings → Privacy & Security → Files and Folders → BBG: switch the folder on |
+| Nothing happens when you open BBG | Wait half a minute (the first start is slow). Then see the log, below |
 | BBG is **very slow**, or the Mac is struggling | Quit other apps (especially web browsers with many tabs). Choose **Fast** next to *Quality* before pressing Track |
 | An outline is **wrong in a few places** | Fix it on the worst frame and Track again ([step 5](#remove-a-background-step-by-step)) |
 | **Shadows or reflections** aren't kept | BBG keeps the object itself, not its shadow |
-| Anything else | The Terminal window that opened with BBG shows the error. Copy it, or take a screenshot |
+| Anything else | BBG keeps a log of what it did. In Finder, choose **Go → Go to Folder…**, paste `~/Library/Logs/BBG`, press Return, and send the file **bbg.log** to whoever looks after BBG, with a screenshot of any message |
 
 ---
 
@@ -249,7 +262,8 @@ backend, not SAM 3.1.
 | Tracking: keyframes, nearest-keyframe ownership, partial re-tracking, re-detection of typed phrases, flags, merge | done | tests with the synthetic backend (J > 0.95 against ground truth) |
 | SAM 3.1 backend (mlx-vlm 0.7.11) | done | `tests/test_sam3_backend.py` (3 tests, passing) runs mlx-vlm's real SAM 3.1 code with random weights in a shallow, narrow config. It checks phrase detection, clicks with refinement, session start, object order on add, that tracker memory stays bounded, and the full tracker loop through the backend. **Mask quality and speed: not measured** |
 | GUI (PySide6) | done | offscreen end-to-end test: select, track, view modes, export |
-| `install.sh`, `BBG.command` | done | shellcheck. Run on Linux with the Mac checks and model download skipped, in the flows the README describes: install from Downloads, start, start after renaming the folder (self-repair), update with the same command, a foreign `~/BBG` left alone. **Not yet run on a Mac** |
+| `install.sh` | done | shellcheck. Run on Linux with the Mac checks and model download skipped: install from Downloads, update with the same command, a foreign `~/BBG` left alone, repair in place. **Not yet run on a Mac** |
+| `BBG.app` (`macos/`): starts BBG with no Terminal window | done | shellcheck; tests build the bundle (Info.plist, icon, launcher) and run the launcher with a stubbed `osascript`: normal start, self-repair, failed repair, missing folder; BBG started through the app on Linux (offscreen). **Not yet opened on a Mac**: whether the menu bar and Dock say "BBG" (rather than "Python") is untested |
 | Phase 0 spike harness | done | dry run with the synthetic backend |
 | macOS `.app` | config only | `[tool.briefcase]` in pyproject; not built |
 
@@ -308,7 +322,8 @@ src/bbg/
   gui/               PySide6 window; the engine thread that owns the model
   cli.py, metrics.py, memory.py, synthetic.py
 spike/               Phase 0 measurement harness
-install.sh, BBG.command   the end-user installer and launcher
+install.sh           the end-user installer (also updates and repairs)
+macos/               BBG.app: launcher, Info.plist, icon (make_icon.py draws it), make-app.sh
 ```
 
 **Memory stays flat with clip length.**
@@ -324,6 +339,15 @@ install.sh, BBG.command   the end-user installer and launcher
 **Edges.**
 - The model's mask (1024 px) is upsampled to full resolution with a fast guided filter, so its edge lands on the picture's edge.
 - It is then sharpened to a clean edge, and grow/shrink and feather are applied.
+
+**BBG.app: no Terminal window.**
+- `install.sh` builds it with `macos/make-app.sh` into `/Applications`, or `~/Applications` if this account can't write there. Built on the user's Mac, it isn't quarantined, so Gatekeeper doesn't stop it.
+- Its executable, `macos/launcher.sh`:
+  - reads BBG's folder from `Contents/Resources/bbg-home`;
+  - logs to `~/Library/Logs/BBG/bbg.log`, and reports problems as `osascript` alerts;
+  - if the environment no longer matches its folder or Python, re-runs `install.sh` quietly (announced with a notification), then starts BBG.
+- To make macOS count the process as BBG (menu bar name, Dock icon) rather than Python, the bundle carries a copy of the framework Python's `Python.app/Contents/MacOS/Python`. The launcher runs it with `__PYVENV_LAUNCHER__` pointing at the environment's python, which is how Python's own launcher selects an environment. It checks that copy works first and falls back to the environment's python. Untested on a Mac.
+- Inside the app, uncaught exceptions go to the log and to a dialog, and `faulthandler` logs hard crashes.
 
 ### Tests
 
@@ -357,3 +381,4 @@ the docstring there lists what it relies on.
 - **Duplicate objects.** Re-detection can create a duplicate when a tracked object re-emerges somewhere its track didn't follow: it appears as e.g. "ball 2". Both are kept by default, so the output is right. Use *Merge into…* to tidy the list.
 - **Fast quality is approximate.** It tracks every other frame and averages the skipped frames from their neighbours. Fast motion will lag on those frames.
 - **Shadows and reflections aren't included.** They aren't part of the object (SCOPE §13).
+- **Installing needs Terminal once.** A downloaded app opens without Terminal only if it is signed and notarised with an Apple Developer ID (a paid account). Until then, `install.sh` builds the app locally instead.

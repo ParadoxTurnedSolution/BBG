@@ -6,13 +6,17 @@
 #
 # It checks the Mac, moves BBG to ~/BBG (moving any older copy aside), makes
 # BBG its own Python environment inside that folder (.venv, so nothing is
-# installed system-wide), installs BBG into it, and offers to download the
-# SAM 3.1 model. Installing and updating are the same command, and running it
+# installed system-wide), installs BBG into it, builds BBG.app (which starts
+# BBG with no Terminal window), offers to download the SAM 3.1 model, and
+# opens BBG. Installing and updating are the same command, and running it
 # again from ~/BBG is safe.
 #
 # For testing elsewhere: BBG_SKIP_MAC_CHECK=1 skips the Mac checks,
 # BBG_SKIP_MODEL=1 skips the model download, BBG_EXTRAS overrides "[sam3,gui]",
-# BBG_HOME sets where BBG goes (default ~/BBG on a Mac; off when skipping checks).
+# BBG_HOME sets where BBG goes (default ~/BBG on a Mac; off when skipping checks),
+# BBG_APP_DIR where BBG.app goes (default /Applications, or ~/Applications if
+# that isn't writable; off when skipping checks), BBG_NO_OPEN=1 doesn't open
+# BBG at the end (the app's own self-repair uses it).
 
 set -euo pipefail
 
@@ -135,13 +139,23 @@ fi
 .venv/bin/python -m pip install --upgrade --quiet pip
 .venv/bin/python -m pip install --upgrade -e ".$EXTRAS"
 echo "$HERE" >.venv/.bbg-home
-chmod +x "$HERE/BBG.command"
 if [ "$MAC_CHECK" = "1" ]; then
-  # Files from a downloaded ZIP are "quarantined", and macOS refuses to run a
-  # double-clicked script from it. This folder is now trusted.
+  # Files from a downloaded ZIP are "quarantined" by macOS. This folder is now trusted.
   xattr -dr com.apple.quarantine "$HERE" 2>/dev/null || true
 fi
 ok "BBG $(.venv/bin/python -c 'import bbg; print(bbg.__version__)') installed in $HERE/.venv"
+
+# The app people open: in /Applications if this account may write there
+# (admin accounts can, without a password), else in ~/Applications.
+APP_DIR="${BBG_APP_DIR:-}"
+if [ -z "$APP_DIR" ] && [ "$MAC_CHECK" = "1" ]; then
+  if [ -w /Applications ]; then APP_DIR=/Applications; else APP_DIR="$HOME/Applications"; fi
+fi
+APP=""
+if [ -n "$APP_DIR" ]; then
+  APP="$(bash "$HERE/macos/make-app.sh" "$HERE" "$APP_DIR")"
+  ok "BBG app made: $APP"
+fi
 
 # -- 4. The model -----------------------------------------------------------------
 
@@ -158,9 +172,11 @@ fi
 
 trap - ERR
 bold "Done: BBG is installed."
-echo "  To start it, double-click BBG.command in this folder:"
-echo "    $HERE"
-if [ "$MAC_CHECK" = "1" ]; then
-  open "$HERE" 2>/dev/null || true
+if [ -n "$APP" ] && [ "${BBG_NO_OPEN:-}" != "1" ]; then
+  echo "  BBG is opening now. You can close this Terminal window: BBG doesn't need it."
+  echo "  From now on, open BBG like any other app: press ⌘ Space, type BBG, press Return."
+  open "$APP" 2>/dev/null || true
+elif [ -n "$APP" ]; then
+  echo "  Open BBG like any other app: $APP"
 fi
 echo
